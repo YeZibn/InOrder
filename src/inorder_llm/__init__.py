@@ -14,6 +14,7 @@ from .intent_planning import (
     IntentPlan, IntentPlanningSubgraph, IntentPlanningError, IntentPlanValidationError,
     IntentStep, LLMIntentModel, build_intent_planning_subgraph, validate_plan,
 )
+from .intent_graph import IntentGraphState, build_intent_graph
 
 __all__ = [
     "LLMClient", "LLMConfig", "load_config", "ChatMessage", "LLMResponse", "Usage",
@@ -21,4 +22,5 @@ __all__ = [
     "RateLimitError", "TimeoutError", "UpstreamError",
     "IntentPlan", "IntentStep", "IntentPlanningSubgraph", "IntentPlanningError",
     "IntentPlanValidationError", "LLMIntentModel", "build_intent_planning_subgraph", "validate_plan",
+    "IntentGraphState", "build_intent_graph",
 ]

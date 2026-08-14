@@ -51,3 +51,14 @@ plan = graph.invoke("参考最近历史订单，修改当前草稿")
 ```
 
 `IntentPlan` 支持主意图、多个订单子意图、步骤参数和 `depends_on`；后续主图可以根据该计划路由到业务子图。
+
+当前已提供真正的 LangGraph StateGraph 入口：
+
+```python
+from inorder_llm.intent_graph import build_intent_graph
+
+graph = build_intent_graph(your_intent_model)
+result = graph.invoke({"message": "参考历史订单修改当前草稿"})
+```
+
+图中 `main_intent` 和 `sub_intent` 是两个独立节点；只有主意图为 `order` 时才会进入子意图节点。
