@@ -40,19 +40,20 @@ def call_llm(state, client: LLMClient):
 
 ## 意图规划子图
 
-意图识别阶段只输出计划，不执行订单业务：
+意图识别阶段只输出计划，不执行订单业务。主意图只区分 `order` 与 `qa`：含明确订单执行请求即为 `order`，纯信息或操作方法询问为 `qa`；混合消息按「执行优先」归为 `order`。
 
 ```python
-from inorder_llm.intent import IntentPlanningSubgraph
+from inorder_llm.graph.intent import build_intent_graph
 
-graph = IntentPlanningSubgraph(model=your_intent_model)
-plan = graph.invoke("参考最近历史订单，修改当前草稿")
+graph = build_intent_graph(your_intent_model)
+result = graph.invoke({"message": "参考最近历史订单，修改当前草稿"})
+plan = result["intent_plan"]
 # plan.sub_intents: query_history_order -> modify_draft
 ```
 
 `IntentPlan` 支持主意图、多个订单子意图、步骤参数和 `depends_on`；后续主图可以根据该计划路由到业务子图。
 
-当前已提供真正的 LangGraph StateGraph 入口。图相关代码按职责位于 `inorder_llm/graph/`：
+图相关代码按职责位于 `inorder_llm/graph/`：
 
 ```text
 graph/
@@ -64,22 +65,7 @@ graph/
     └── nodes/
 ```
 
-`BaseNode` 只统一节点调用边界，`BaseGraph` 只统一 build/compile；底层仍直接使用官方 LangGraph `StateGraph`。
-
-```python
-from inorder_llm.graph.intent import build_intent_graph
-```
-
-兼容入口仍然可用：
-
-```python
-from inorder_llm.graph.intent import build_intent_graph
-
-graph = build_intent_graph(your_intent_model)
-result = graph.invoke({"message": "参考历史订单修改当前草稿"})
-```
-
-图中 `main_intent` 和 `sub_intent` 是两个独立节点；只有主意图为 `order` 时才会进入子意图节点。
+`BaseNode` 只统一节点调用边界，`BaseGraph` 只统一 build/compile；底层仍直接使用官方 LangGraph `StateGraph`。图中 `main_intent` 和 `sub_intent` 是两个独立节点；只有主意图为 `order` 时才会进入子意图节点。当 `order` 未识别出具体子意图时，计划会标记 `needs_clarification`。
 
 ## 交互式 CLI
 

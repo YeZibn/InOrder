@@ -2,7 +2,8 @@ from typing import Any, Dict
 
 from ....graph.base import BaseNode
 from ....intent.models import IntentPlan
-from ....intent.planning import IntentModel, IntentPlanValidationError, _step_from_candidate, validate_plan
+from ....intent.protocols import IntentModel
+from ....intent.validation import IntentPlanValidationError, _step_from_candidate, validate_plan
 
 
 class MainIntentNode(BaseNode):
@@ -14,12 +15,9 @@ class MainIntentNode(BaseNode):
     def run(self, state) -> Dict[str, Any]:
         result = self.model.classify_main_intent(state["message"])
         main_intent = result.get("main_intent")
-        if main_intent not in ("order", "qa", "ambiguous"):
+        if main_intent not in ("order", "qa"):
             raise IntentPlanValidationError("invalid main_intent")
-        update = {"main_intent": main_intent, "main_confidence": result.get("confidence")}
-        if main_intent == "ambiguous":
-            update.update(needs_clarification=True, clarification_reason="无法确定用户是要执行订单操作还是进行问答")
-        return update
+        return {"main_intent": main_intent, "main_confidence": result.get("confidence")}
 
 
 class SubIntentNode(BaseNode):
@@ -54,13 +52,6 @@ class ValidatePlanNode(BaseNode):
 
     def run(self, state):
         return {"intent_plan": validate_plan(state["intent_plan"])}
-
-
-class ClarificationNode(BaseNode):
-    name = "clarification"
-
-    def run(self, state):
-        return {"needs_clarification": True, "clarification_reason": state.get("clarification_reason") or "需要进一步澄清用户意图"}
 
 
 class FinalizeNode(BaseNode):

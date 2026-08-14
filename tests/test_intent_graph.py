@@ -25,6 +25,7 @@ def test_compiled_graph_order_executes_both_intent_nodes():
     assert model.calls == ["main_intent_node", "sub_intent_node"]
     assert result["main_intent"] == "order"
     assert [s.name for s in result["intent_plan"].sub_intents] == ["query_history_order", "modify_draft"]
+    assert result["needs_clarification"] is False
 
 
 def test_qa_route_skips_sub_intent_node_and_has_unified_output():
@@ -36,13 +37,14 @@ def test_qa_route_skips_sub_intent_node_and_has_unified_output():
     assert result["needs_clarification"] is False
 
 
-def test_ambiguous_route_enters_clarification_without_sub_intent():
-    model = RecordingModel("ambiguous", [{"name": "create_order"}])
-    result = build_intent_graph(model).invoke({"message": "查一下并告诉我怎么下单"})
-    assert model.calls == ["main_intent_node"]
+def test_order_without_sub_intent_needs_clarification():
+    model = RecordingModel("order")
+    result = build_intent_graph(model).invoke({"message": "帮我处理一下"})
+    assert model.calls == ["main_intent_node", "sub_intent_node"]
+    assert result["main_intent"] == "order"
     assert result["needs_clarification"] is True
     assert result["clarification_reason"]
-    assert result["intent_plan"].main_intent == "ambiguous"
+    assert result["intent_plan"].sub_intents == ()
 
 
 def test_graph_is_recognition_only():

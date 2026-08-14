@@ -2,7 +2,7 @@ from typing import Any, Dict, Mapping
 from .models import IntentPlan, IntentStep
 from .resolver import IntentPlanningError
 
-MAIN_INTENTS = frozenset(("order", "qa", "ambiguous"))
+MAIN_INTENTS = frozenset(("order", "qa"))
 ORDER_SUB_INTENTS = frozenset(("create_order", "modify_draft", "query_history_order"))
 
 
