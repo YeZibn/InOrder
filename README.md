@@ -62,3 +62,27 @@ result = graph.invoke({"message": "参考历史订单修改当前草稿"})
 ```
 
 图中 `main_intent` 和 `sub_intent` 是两个独立节点；只有主意图为 `order` 时才会进入子意图节点。
+
+## 交互式 CLI
+
+安装项目后启动：
+
+```bash
+conda run -n agent inorder
+```
+
+支持：
+
+```text
+/intent             选择模式提示
+/intent auto        切换自动模式
+/intent order       切换订单意图模式
+/intent qa          切换问答占位模式
+/intent plan        输出结构化 IntentPlan
+/mode               查看当前模式
+/clear              清空本地会话消息
+/help               查看命令
+/exit               退出
+```
+
+CLI 当前只做意图识别，不查询历史订单、不修改草稿、不创建订单、不确认下单，也不回答真实问答。
