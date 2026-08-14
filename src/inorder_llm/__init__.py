@@ -1,6 +1,5 @@
-from .client import LLMClient
-from .config import LLMConfig, load_config
-from .errors import (
+from .infrastructure.llm import LLMClient, LLMConfig, load_config
+from .infrastructure.llm import (
     AuthenticationError,
     ConfigurationError,
     InvalidRequestError,
@@ -9,12 +8,12 @@ from .errors import (
     TimeoutError,
     UpstreamError,
 )
-from .models import ChatMessage, LLMResponse, Usage
-from .intent_planning import (
+from .infrastructure.llm import ChatMessage, LLMResponse, Usage
+from .intent import (
     IntentPlan, IntentPlanningSubgraph, IntentPlanningError, IntentPlanValidationError,
     IntentStep, LLMIntentModel, build_intent_planning_subgraph, validate_plan,
 )
-from .intent_graph import IntentGraphState, build_intent_graph
+from .graph.intent import IntentGraph, IntentGraphState, build_intent_graph
 
 __all__ = [
     "LLMClient", "LLMConfig", "load_config", "ChatMessage", "LLMResponse", "Usage",
@@ -22,5 +21,5 @@ __all__ = [
     "RateLimitError", "TimeoutError", "UpstreamError",
     "IntentPlan", "IntentStep", "IntentPlanningSubgraph", "IntentPlanningError",
     "IntentPlanValidationError", "LLMIntentModel", "build_intent_planning_subgraph", "validate_plan",
-    "IntentGraphState", "build_intent_graph",
+    "IntentGraph", "IntentGraphState", "build_intent_graph",
 ]

@@ -10,7 +10,7 @@ class ChatTransport(Protocol):
 
 
 class OpenAITransport:
-    """Thin adapter around the optional OpenAI-compatible SDK."""
+    """Thin adapter around the OpenAI-compatible SDK."""
 
     def __init__(self, config: LLMConfig):
         try:
@@ -20,10 +20,7 @@ class OpenAITransport:
         self._client = OpenAI(api_key=config.api_key, base_url=config.base_url, timeout=config.timeout)
 
     def complete(self, messages, config):
-        request = {
-            "model": config.model,
-            "messages": [{"role": message.role, "content": message.content} for message in messages],
-        }
+        request = {"model": config.model, "messages": [{"role": m.role, "content": m.content} for m in messages]}
         if config.reasoning_effort is not None:
             request["reasoning_effort"] = config.reasoning_effort
         return self._client.chat.completions.create(**request)

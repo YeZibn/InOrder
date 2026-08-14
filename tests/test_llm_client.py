@@ -2,10 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from inorder_llm.client import LLMClient
-from inorder_llm.config import LLMConfig, load_config
-from inorder_llm.errors import AuthenticationError, ConfigurationError, RateLimitError, TimeoutError
-from inorder_llm.models import ChatMessage
+from inorder_llm.infrastructure.llm.client import LLMClient
+from inorder_llm.infrastructure.llm.config import LLMConfig, load_config
+from inorder_llm.infrastructure.llm.errors import AuthenticationError, ConfigurationError, RateLimitError, TimeoutError
+from inorder_llm.infrastructure.llm.models import ChatMessage
 
 
 def config(**kwargs):

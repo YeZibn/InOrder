@@ -1,4 +1,4 @@
-from inorder_llm.intent_cli import CliSession, CommandParser, IntentCli, MODES
+from inorder_llm.cli.app import CliSession, CommandParser, IntentCli, MODES
 
 
 class FakeGraph:

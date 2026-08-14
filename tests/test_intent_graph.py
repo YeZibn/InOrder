@@ -1,4 +1,4 @@
-from inorder_llm.intent_graph import build_intent_graph
+from inorder_llm.graph.intent import build_intent_graph
 
 
 class RecordingModel:

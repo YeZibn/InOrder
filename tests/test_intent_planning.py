@@ -1,6 +1,6 @@
 import pytest
 
-from inorder_llm.intent_planning import (
+from inorder_llm.intent import (
     IntentPlan,
     IntentPlanValidationError,
     IntentPlanningSubgraph,

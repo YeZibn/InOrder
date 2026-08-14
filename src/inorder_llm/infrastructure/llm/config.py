@@ -5,7 +5,7 @@ from .errors import ConfigurationError
 
 try:
     from dotenv import load_dotenv
-except ImportError:  # Optional for callers that inject os.environ directly.
+except ImportError:
     load_dotenv = None
 
 

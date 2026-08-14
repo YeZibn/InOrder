@@ -21,8 +21,7 @@ class LLMClient:
                 raise InvalidRequestError("each message requires a role and content")
         for attempt in range(self.config.max_retries + 1):
             try:
-                raw = self.transport.complete(messages, self.config)
-                return self._normalize(raw)
+                return self._normalize(self.transport.complete(messages, self.config))
             except Exception as exc:
                 error = self._normalize_error(exc)
                 retryable = isinstance(error, (TimeoutError, UpstreamError, RateLimitError))
@@ -33,18 +32,14 @@ class LLMClient:
         raise AssertionError("unreachable")
 
     def _normalize(self, raw: Any) -> LLMResponse:
-        choice = raw.choices[0]
-        message = choice.message
+        message = raw.choices[0].message
         usage_raw = getattr(raw, "usage", None)
-        usage = None
-        if usage_raw is not None:
-            usage = Usage(getattr(usage_raw, "prompt_tokens", None), getattr(usage_raw, "completion_tokens", None), getattr(usage_raw, "total_tokens", None))
+        usage = None if usage_raw is None else Usage(getattr(usage_raw, "prompt_tokens", None), getattr(usage_raw, "completion_tokens", None), getattr(usage_raw, "total_tokens", None))
         return LLMResponse(getattr(message, "content", "") or "", getattr(raw, "model", self.config.model), usage, {"id": getattr(raw, "id", None)})
 
     @staticmethod
     def _normalize_error(exc: Exception):
-        name = exc.__class__.__name__.lower()
-        text = str(exc)
+        name, text = exc.__class__.__name__.lower(), str(exc)
         if "authentication" in name or "permission" in name or "401" in text:
             return AuthenticationError("LLM authentication failed")
         if "ratelimit" in name or "rate limit" in text.lower() or "429" in text:

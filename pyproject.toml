@@ -13,8 +13,8 @@ dependencies = ["openai>=2.26,<3.0", "python-dotenv>=1.0,<2.0", "langgraph>=1.0,
 dev = ["pytest>=7.0"]
 
 [project.scripts]
-llm-verify = "inorder_llm.cli:main"
-inorder = "inorder_llm.intent_cli:main"
+llm-verify = "inorder_llm.commands.llm_verify:main"
+inorder = "inorder_llm.commands.intent_chat:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
