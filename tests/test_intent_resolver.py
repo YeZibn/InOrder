@@ -29,8 +29,11 @@ class FakeLLMClient:
 def test_main_intent_prompt_defines_order_and_qa_with_execution_priority():
     prompt = MAIN_INTENT_SYSTEM_PROMPT
     assert '"main_intent": "order" | "qa"' in prompt
+    assert "期望的输出" in prompt
     assert "执行优先" in prompt
     assert "操作方法" in prompt
+    assert "运货" in prompt
+    assert "多少钱" in prompt
     assert "confidence" in prompt
 
 

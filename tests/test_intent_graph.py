@@ -6,9 +6,11 @@ class RecordingModel:
         self.main = main
         self.candidates = list(candidates)
         self.calls = []
+        self.messages = []
 
     def classify_main_intent(self, message):
         self.calls.append("main_intent_node")
+        self.messages.append(message)
         return {"main_intent": self.main, "confidence": 0.9}
 
     def extract_sub_intents(self, message, main_intent):
@@ -44,6 +46,22 @@ def test_order_without_sub_intent_needs_clarification():
     assert result["main_intent"] == "order"
     assert result["needs_clarification"] is True
     assert result["clarification_reason"]
+    assert result["intent_plan"].sub_intents == ()
+
+
+def test_business_goal_message_routes_to_order():
+    model = RecordingModel("order", [{"id": "s1", "name": "create_order"}])
+    result = build_intent_graph(model).invoke({"message": "我想从上海运货到温州"})
+    assert result["main_intent"] == "order"
+    assert model.messages == ["我想从上海运货到温州"]
+    assert result["needs_clarification"] is False
+
+
+def test_capability_inquiry_message_routes_to_qa():
+    model = RecordingModel("qa")
+    result = build_intent_graph(model).invoke({"message": "上海到温州能运吗"})
+    assert result["main_intent"] == "qa"
+    assert model.messages == ["上海到温州能运吗"]
     assert result["intent_plan"].sub_intents == ()
 
 
