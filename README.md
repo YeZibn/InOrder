@@ -37,3 +37,17 @@ def call_llm(state, client: LLMClient):
 ```
 
 当前版本只支持同步文本调用，不包含 LangGraph 图、订单状态、流式输出或工具调用。
+
+## 意图规划子图
+
+意图识别阶段只输出计划，不执行订单业务：
+
+```python
+from inorder_llm.intent_planning import IntentPlanningSubgraph
+
+graph = IntentPlanningSubgraph(model=your_intent_model)
+plan = graph.invoke("参考最近历史订单，修改当前草稿")
+# plan.sub_intents: query_history_order -> modify_draft
+```
+
+`IntentPlan` 支持主意图、多个订单子意图、步骤参数和 `depends_on`；后续主图可以根据该计划路由到业务子图。
