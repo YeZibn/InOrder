@@ -97,3 +97,21 @@
   - 新增 `tests/test_extract.py`：prompt 内容断言（action 枚举、14 类实体、归一规则、few-shot）、action 四类提取（add/set/remove/replace）、实体类型覆盖与归一（location 角色、vehicle_type 归一值、cargo 属性、time history context）、解析健壮性（非法 JSON/非法 action/缺字段/非数组/非对象 → StructuredIntentError）、输入参数注入（参考时间含星期、history 段、system/user 消息顺序）。
   - 尚未接入图执行（会话状态载体未引入），extract 作为纯函数独立测试。
   - 尚无真实 LLM 评测集；action 判定与实体归一准确率待评测集补充。
+
+---
+
+### `REWRITE_SYSTEM_PROMPT`（`rewrite/resolver.py`）
+
+#### 2026-08-15
+
+- **变更摘要**:
+  - 新增订单语义重写 prompt，输入分为当前订单上下文、最近对话历史和用户本轮输入。
+  - 明确用户本轮输入、OrderContext、HistoryConversation 的优先级和保守指代消解规则。
+  - 增加 `rewritten_text` 与 `extraction_text` 双文本输出，后者只描述本轮增量语义。
+  - 明确 add/set/remove/replace 与中文动作表达的映射，并规定无法唯一消歧时返回澄清状态。
+- **原因**: 订单 extract 需要保留多轮输入中的增量动作，避免把已有 OrderContext 重复提取为 set，从而破坏 add/remove/replace 语义。
+- **关联**: OpenSpec change `add-order-rewrite-node`
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q` → 65 passed。
+  - `tests/test_rewrite.py`：覆盖 RewriteResult 序列化、增量货物、上下文分区、消息角色、prompt 动作规则、非法 JSON/字段和澄清结果。
+  - 当前尚无真实 LLM 评测集；rewrite 与实体提取联调待后续接入订单子图后补充。
