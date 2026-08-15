@@ -16,11 +16,14 @@ from .intent import (
 from .graph.intent import IntentGraph, IntentGraphState, build_intent_graph
 from .normalization import (
     NormalizationError,
+    PhoneNormalizationError,
     TimeNormalizationError,
     normalize_entities,
     normalize_entity,
     normalize_time_entities,
     normalize_time_entity,
+    normalize_phone_entity,
+    normalize_phone_entities,
 )
 
 __all__ = [
@@ -32,4 +35,5 @@ __all__ = [
     "IntentGraph", "IntentGraphState", "build_intent_graph",
     "NormalizationError", "normalize_entity", "normalize_entities",
     "TimeNormalizationError", "normalize_time_entity", "normalize_time_entities",
+    "PhoneNormalizationError", "normalize_phone_entity", "normalize_phone_entities",
 ]

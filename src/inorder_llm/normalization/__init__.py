@@ -3,13 +3,17 @@
 from .models import NormalizationError, NormalizedValue
 from .resolver import normalize_entities, normalize_entity
 from .time import TimeNormalizationError, normalize_time_entities, normalize_time_entity
+from .phone import PhoneNormalizationError, normalize_phone_entities, normalize_phone_entity
 
 __all__ = [
     "NormalizationError",
     "NormalizedValue",
     "TimeNormalizationError",
+    "PhoneNormalizationError",
     "normalize_entity",
     "normalize_entities",
     "normalize_time_entity",
     "normalize_time_entities",
+    "normalize_phone_entity",
+    "normalize_phone_entities",
 ]
