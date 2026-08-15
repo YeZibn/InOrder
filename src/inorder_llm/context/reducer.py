@@ -71,6 +71,8 @@ class OrderContextReducer:
         elif entity.type == "phone":
             self._phone(context, entity)
         elif entity.type == "time":
+            if entity.attributes.get("context") == "history":
+                raise ContextReductionError("history time cannot update delivery_time")
             self._single(context, "delivery_time", dict(entity.attributes), entity)
         elif entity.type == "cargo":
             self._cargo(context, entity)

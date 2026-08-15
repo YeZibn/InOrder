@@ -6,6 +6,7 @@ from typing import Any, Iterable, List, Mapping
 from ..extract.models import Entity
 from .enums import CANONICAL_VALUES, ENUM_ALIASES
 from .models import NormalizationError
+from .time import normalize_time_entity
 
 
 _ENTITY_TO_FIELD = {
@@ -54,6 +55,8 @@ def _normalize_value(field: str, entity_type: str, raw: Any) -> Any:
 
 def normalize_entity(entity: Entity) -> Entity:
     """Return a normalized copy; non-enum entities pass through unchanged."""
+    if entity.type == "time":
+        return normalize_time_entity(entity)
     field = _ENTITY_TO_FIELD.get(entity.type, entity.type if entity.type == "service_type" else None)
     if field is None:
         return entity
