@@ -14,6 +14,7 @@ from .intent import (
     IntentStep, LLMIntentModel, validate_plan,
 )
 from .graph.intent import IntentGraph, IntentGraphState, build_intent_graph
+from .normalization import NormalizationError, normalize_entities, normalize_entity
 
 __all__ = [
     "LLMClient", "LLMConfig", "load_config", "ChatMessage", "LLMResponse", "Usage",
@@ -22,4 +23,5 @@ __all__ = [
     "IntentPlan", "IntentStep", "IntentPlanningError",
     "IntentPlanValidationError", "LLMIntentModel", "validate_plan",
     "IntentGraph", "IntentGraphState", "build_intent_graph",
+    "NormalizationError", "normalize_entity", "normalize_entities",
 ]

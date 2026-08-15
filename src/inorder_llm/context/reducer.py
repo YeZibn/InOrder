@@ -5,6 +5,7 @@ import re
 from typing import Any, Dict, Iterable, Mapping, Optional
 
 from ..extract.models import Entity
+from ..normalization import normalize_entities
 from .models import OrderContext
 
 
@@ -58,7 +59,7 @@ class OrderContextReducer:
 
     def apply(self, context: OrderContext, entities: Iterable[Entity]) -> OrderContext:
         result = deepcopy(context)
-        for entity in entities:
+        for entity in normalize_entities(entities):
             self._apply_one(result, entity)
         return result
 
