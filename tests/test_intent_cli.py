@@ -155,6 +155,26 @@ def test_full_output_reports_clarification_and_extract_skip():
     assert "车型指代不唯一" in output
 
 
+def test_order_chain_persists_updated_context_between_messages():
+    class ContextGraph:
+        def invoke(self, state):
+            updated = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
+            return {
+                "rewrite_result": RewriteResult("已提取", state["message"]),
+                "entities": [],
+                "order_context": updated,
+                "order_context_updated": True,
+                "needs_clarification": False,
+            }
+
+    cli = IntentCli(order_graph=ContextGraph())
+    cli.switch_chain("order")
+    cli.handle_message("一吨苹果")
+    assert cli.session.order_context.cargo == [{"name": "苹果", "weight": "1吨"}]
+    output = cli.handle_message("继续")
+    assert "订单上下文：已更新" in output
+
+
 def test_clear_resets_history_and_order_context_but_keeps_chain():
     cli = IntentCli(intent_graph=FakeIntentGraph())
     cli.switch_chain("order")

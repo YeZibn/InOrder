@@ -3,7 +3,7 @@
 from langgraph.graph import END, START, StateGraph
 
 from ...graph.base import BaseGraph
-from .nodes import ClarificationNode, ExtractNode, FinalizeNode, RewriteNode, route_rewrite
+from .nodes import ClarificationNode, ContextUpdateNode, ExtractNode, FinalizeNode, RewriteNode, route_rewrite
 from .protocols import EntityExtractorModel, RewriteModel
 from .state import OrderGraphState
 
@@ -18,6 +18,7 @@ class OrderProcessingGraph(BaseGraph[OrderGraphState]):
         builder.add_node("rewrite", RewriteNode(self.rewrite_model))
         builder.add_node("extract", ExtractNode(self.extractor))
         builder.add_node("clarification", ClarificationNode())
+        builder.add_node("update_context", ContextUpdateNode())
         builder.add_node("finalize", FinalizeNode())
         builder.add_edge(START, "rewrite")
         builder.add_conditional_edges(
@@ -26,7 +27,8 @@ class OrderProcessingGraph(BaseGraph[OrderGraphState]):
             {"clarification": "clarification", "extract": "extract"},
         )
         builder.add_edge("clarification", "finalize")
-        builder.add_edge("extract", "finalize")
+        builder.add_edge("extract", "update_context")
+        builder.add_edge("update_context", "finalize")
         builder.add_edge("finalize", END)
         return builder
 

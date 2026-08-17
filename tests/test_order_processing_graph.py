@@ -2,6 +2,7 @@ from copy import deepcopy
 
 import pytest
 
+from inorder_llm.context import ContextReductionError, OrderContextReducer
 from inorder_llm.context.models import HistoryConversation, OrderContext
 from inorder_llm.extract.models import Entity
 from inorder_llm.graph.order import build_order_processing_graph
@@ -118,3 +119,47 @@ def test_extract_error_propagates_after_rewrite():
         build_order_processing_graph(rewrite, extractor).invoke(_state())
 
     assert len(extractor.calls) == 1
+
+
+def test_graph_applies_entities_to_new_order_context_without_mutating_input():
+    original = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
+    rewrite = FakeRewriteModel(RewriteResult("再加一吨香蕉", "再加一吨香蕉"))
+    extractor = FakeExtractor(
+        [Entity("cargo", "add", {"name": "香蕉", "weight": "1吨"}, "一吨香蕉")]
+    )
+
+    result = build_order_processing_graph(rewrite, extractor).invoke(_state(context=original))
+
+    assert result["order_context"].cargo == [
+        {"name": "苹果", "weight": "1吨"},
+        {"name": "香蕉", "weight": "1吨"},
+    ]
+    assert result["order_context_updated"] is True
+    assert original.cargo == [{"name": "苹果", "weight": "1吨"}]
+
+
+def test_graph_supports_set_replace_and_remove_context_actions():
+    reducer = OrderContextReducer()
+    context = OrderContext()
+    context = reducer.apply(context, [Entity("location", "set", {"role": "pickup", "city": "上海"})])
+    context = reducer.apply(context, [Entity("location", "replace", {"role": "pickup", "city": "杭州"})])
+    context = reducer.apply(context, [Entity("vehicle_specs", "set", {"extraction_text": "高顶"})])
+    context = reducer.apply(context, [Entity("vehicle_specs", "remove", {"extraction_text": "高顶"})])
+    context = reducer.apply(context, [Entity("location", "remove", {"role": "pickup"})])
+    assert context.pickup_location is None
+    assert context.vehicle_specs == []
+
+
+def test_clarification_preserves_original_order_context():
+    original = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
+    rewrite = FakeRewriteModel(RewriteResult("", "", True, "车型不明确"))
+    result = build_order_processing_graph(rewrite, FakeExtractor()).invoke(_state(context=original))
+    assert result["order_context"] == original
+    assert result["order_context_updated"] is False
+
+
+def test_reducer_failure_does_not_return_partial_context():
+    rewrite = FakeRewriteModel(RewriteResult("设置未知字段", "设置未知字段"))
+    extractor = FakeExtractor([Entity("unsupported", "set", {"value": "x"}, "未知")])
+    with pytest.raises(ContextReductionError):
+        build_order_processing_graph(rewrite, extractor).invoke(_state())

@@ -58,7 +58,7 @@ CLI SHALL 将普通消息路由到当前链路对应的图入口：`intent` 只�
 
 ### Requirement: Expose order processing stage status
 
-full 和 order 链路 SHALL 暴露订单处理阶段状态，至少区分是否进入订单处理子图、rewrite 是否完成、extract 是否执行或跳过，以及最终实体数量。
+full 和 order 链路 SHALL 暴露订单处理阶段状态，至少区分是否进入订单处理子图、rewrite 是否完成、extract 是否执行或跳过、最终实体数量，以及订单上下文是否更新。
 
 #### Scenario: Extraction status is observable
 
@@ -70,14 +70,29 @@ full 和 order 链路 SHALL 暴露订单处理阶段状态，至少区分是否�
 - **WHEN** rewrite 触发澄清并跳过 extract
 - **THEN** CLI 显示 `extract` 已跳过及跳过原因
 
+#### Scenario: Context update status is observable
+
+- **WHEN** 订单处理子图返回更新后的订单上下文
+- **THEN** CLI 输出订单上下文已更新的状态
+
 ### Requirement: Preserve order parsing context
 
-CLI SHALL 为 `order` 和 `full` 链路提供当前消息、`HistoryConversation`、`OrderContext` 和参考时间；本次解析不修改订单上下文。
+CLI SHALL 为 `order` 和 `full` 链路提供当前消息、`HistoryConversation`、`OrderContext` 和参考时间，并在订单处理子图返回新上下文时保存到当前内存 session。
 
 #### Scenario: Order chain passes context
 
 - **WHEN** 用户在 `order` 链路输入消息
 - **THEN** 订单处理子图收到当前历史、订单上下文和参考时间
+
+#### Scenario: Order chain persists updated context
+
+- **WHEN** `order` 链路返回更新后的订单上下文
+- **THEN** CLI 将该上下文保存为当前 session 的 `OrderContext`，供下一轮输入使用
+
+#### Scenario: Full chain persists updated context
+
+- **WHEN** `full` 链路识别主意图为 `order` 且订单处理子图返回更新后的订单上下文
+- **THEN** CLI 将该上下文保存为当前 session 的 `OrderContext`
 
 #### Scenario: Clear resets conversation state
 
@@ -86,7 +101,7 @@ CLI SHALL 为 `order` 和 `full` 链路提供当前消息、`HistoryConversation
 
 ### Requirement: Keep compatibility and safe boundary
 
-CLI SHALL 保留 `/intent` 作为切换到 `intent` 链路的兼容命令，并 SHALL 只执行识别和语义解析，不执行 normalization、reducer、订单查询、创建或确认。
+CLI SHALL 保留 `/intent` 作为切换到 `intent` 链路的兼容命令，并 SHALL 只执行识别、语义解析和内存订单上下文更新；不得执行订单查询、创建或确认。
 
 #### Scenario: Legacy intent command
 

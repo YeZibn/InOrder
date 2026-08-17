@@ -60,6 +60,7 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
             lines.append("澄清：否")
             lines.append("Extract：" + ("已执行" if result.get("extract_executed") else "未执行"))
         lines.append("实体数量：" + str(result.get("entity_count", len(result.get("entities", [])))))
+        lines.append("订单上下文：" + ("已更新" if result.get("order_context_updated") else "未更新"))
         for entity in result.get("entities", []):
             item = _data(entity)
             lines.append("Entity：" + json.dumps(item, ensure_ascii=False))
@@ -141,6 +142,14 @@ class IntentCli:
         runner = {"full": self.full_runner, "intent": self.intent_runner, "order": self.order_runner}[self.session.chain]
         if runner is None: return "当前链路未配置，无法识别。"
         result = runner.run(message, context)
+        if self.session.chain == "order":
+            updated_context = result.get("order_context")
+            if updated_context is not None:
+                self.session.order_context = updated_context
+        elif self.session.chain == "full":
+            order_result = result.get("order_result")
+            if order_result and order_result.get("order_context") is not None:
+                self.session.order_context = order_result["order_context"]
         return format_result(result, self.session.chain, self.session.mode)
 
     def run(self):

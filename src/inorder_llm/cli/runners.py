@@ -50,6 +50,7 @@ class OrderChainRunner:
                     result.get("clarification_reason") if needs_clarification else None
                 ),
                 "entity_count": len(result.get("entities", ())),
+                "order_context_updated": bool(result.get("order_context_updated")),
             }
         )
         return result

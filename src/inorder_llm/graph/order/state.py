@@ -12,6 +12,7 @@ class OrderGraphState(TypedDict, total=False):
     reference_time: str
     history: HistoryConversation
     order_context: OrderContext
+    order_context_updated: bool
     rewrite_result: RewriteResult
     entities: List[Entity]
     needs_clarification: bool
