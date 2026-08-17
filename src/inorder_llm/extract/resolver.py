@@ -57,20 +57,27 @@ person —— 人名/称呼
 phone —— 手机号
 - role：sender 或 receiver
 
-vehicle_type —— 车型名称
-- extraction_text 必须是标准车型名之一：
-  微面、小面、中面、大面、依维柯、微货、小货、中货、
-  3米8、4米2、5米2、6米2、6米8、7米6、8米2、8米6、
-  9米6、11米7、12米5、13米、13米7、15米、16米、17米5、
-  跑腿、四轮小件等
-- 语义归一：
-  - 小拉/轿车 → 四轮小件
-  - 小面包 → 小面
-  - 面包车 → 中面
-- 「X米以上」：取不小于 X 且最接近 X 的标准长度
+vehicle_type —— 基础车型或标准车长
+- 只提取基础车型和标准车长，不提取车辆能力、车厢类型、运输要求或装卸设备。
+- 支持的基础车型 code：
+  four_wheel_small（四轮小件）、micro_van（微面）、small_van（小面）、
+  medium_van（中面）、large_van（大面）、iveco（依维柯）、micro_truck（微货）、
+  small_truck（小货）、medium_truck（中货）。
+- 支持的标准车长 code：
+  truck_3m8（3米8）、truck_4m2（4米2）、truck_5m2（5米2）、truck_6m2（6米2）、
+  truck_6m8（6米8）、truck_7m6（7米6）、truck_8m2（8米2）、truck_8m6（8米6）、
+  truck_9m6（9米6）、truck_11m7（11米7）、truck_12m5（12米5）、truck_13m（13米）、
+  truck_13m7（13米7）、truck_15m（15米）、truck_16m（16米）、truck_17m5（17米5）。
+- `attributes.value` 必须使用上述目录 code；`extraction_text` 保留用户在本轮使用的原文短语。
+- 明确别名：小拉/轿车 → four_wheel_small；小面包 → small_van；面包车 → medium_van。
+- 不要在此处推导微面/小面、中面/大面、微货/小货/中货之间的关系，也不要将“X米以上”选择为某个标准车长。
 
-vehicle_specs —— 车型规格修饰
-例如：高顶、封闭式、带尾板等。每个修饰词单独输出一条。
+vehicle_specs —— 车辆能力、车厢类型、运输要求或装卸设备
+- 支持的规格 code：cold_chain（冷链）、enclosed（厢式）、high_rail（高栏）、
+  flatbed（平板）、dangerous_goods（危险品）、high_roof（高顶）、tail_lift（尾板）。
+- 冷链、厢式、高栏、平板、危险品、高顶、尾板及其别名 MUST 输出为 `vehicle_specs`，不得输出为 `vehicle_type`。
+- `attributes.value` 必须使用上述目录 code；`extraction_text` 保留用户原文短语。
+- 同一句中的多个规格必须各输出一个独立的 `vehicle_specs` entity，不要拼成一个值。
 
 cargo —— 货物信息
 属性可包含：
@@ -137,9 +144,9 @@ Few-shot 示例：
 
 示例4（replace）：
 输入：【参考时间】2026-08-14 10:00（星期五）
-用户：车型换成冷链车
+用户：车型规格换成冷链车
 输出：
-{"entities":[{"type":"vehicle_type","action":"replace","extraction_text":"冷链","attributes":{"extraction_text":"冷链"}}]}
+{"entities":[{"type":"vehicle_specs","action":"replace","extraction_text":"冷链车","attributes":{"value":"cold_chain"}}]}
 
 示例5（history context）：
 输入：【参考时间】2026-08-14 10:00（星期五）
@@ -149,6 +156,24 @@ assistant: 已为您创建草稿
 用户：上次那个再发一单
 输出：
 {"entities":[{"type":"order_id","action":"set","extraction_text":"上次那个","attributes":{"context":"history"}}]}
+
+示例6（cold-chain spec）：
+输入：【参考时间】2026-08-14 10:00（星期五）
+用户：要冷链车
+输出：
+{"entities":[{"type":"vehicle_specs","action":"set","extraction_text":"冷链车","attributes":{"value":"cold_chain"}}]}
+
+示例7（combined vehicle and specs）：
+输入：【参考时间】2026-08-14 10:00（星期五）
+用户：要一辆4米2冷链厢式车
+输出：
+{"entities":[{"type":"vehicle_type","action":"set","extraction_text":"4米2","attributes":{"value":"truck_4m2"}},{"type":"vehicle_specs","action":"set","extraction_text":"冷链","attributes":{"value":"cold_chain"}},{"type":"vehicle_specs","action":"set","extraction_text":"厢式","attributes":{"value":"enclosed"}}]}
+
+示例8（multiple specs independently）：
+输入：【参考时间】2026-08-14 10:00（星期五）
+用户：4米2高顶带尾板
+输出：
+{"entities":[{"type":"vehicle_type","action":"set","extraction_text":"4米2","attributes":{"value":"truck_4m2"}},{"type":"vehicle_specs","action":"set","extraction_text":"高顶","attributes":{"value":"high_roof"}},{"type":"vehicle_specs","action":"set","extraction_text":"带尾板","attributes":{"value":"tail_lift"}}]}
 
 输出：仅返回符合以下 schema 的 JSON 对象：
 {"entities":[{"type":"<实体类型>","action":"add"|"set"|"remove"|"replace","extraction_text":"<原文短语或概括>","attributes":{<类型特定属性>}}]}

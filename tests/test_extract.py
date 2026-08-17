@@ -51,6 +51,23 @@ def test_prompt_contains_normalization_rules():
     assert "surname" in p
 
 
+def test_prompt_separates_vehicle_types_and_specs():
+    p = EXTRACTION_SYSTEM_PROMPT
+    for code in ("truck_4m2", "cold_chain", "enclosed", "high_rail", "flatbed",
+                 "dangerous_goods", "high_roof", "tail_lift"):
+        assert code in p
+    assert "不得输出为 `vehicle_type`" in p
+    assert "多个规格必须各输出一个独立的 `vehicle_specs` entity" in p
+    assert "X米以上" in p and "不要在此处推导" in p
+
+
+def test_prompt_vehicle_examples_preserve_text_and_use_catalog_codes():
+    p = EXTRACTION_SYSTEM_PROMPT
+    assert '"extraction_text":"冷链车","attributes":{"value":"cold_chain"}' in p
+    assert '"extraction_text":"4米2","attributes":{"value":"truck_4m2"}' in p
+    assert '"extraction_text":"带尾板","attributes":{"value":"tail_lift"}' in p
+
+
 def test_prompt_contains_action_few_shot_examples():
     p = EXTRACTION_SYSTEM_PROMPT
     for a in ('"action":"add"', '"action":"set"', '"action":"remove"', '"action":"replace"'):
@@ -87,12 +104,13 @@ def test_extract_remove_action():
 
 
 def test_extract_replace_action():
-    payload = {"entities": [{"type": "vehicle_type", "action": "replace", "extraction_text": "冷链",
-                             "attributes": {"extraction_text": "冷链"}}]}
+    payload = {"entities": [{"type": "vehicle_specs", "action": "replace", "extraction_text": "冷链车",
+                             "attributes": {"value": "cold_chain"}}]}
     client = FakeLLMClient(json.dumps(payload))
-    entities = extract_entities(client, "车型换成冷链车", [], "2026-08-14 10:00")
+    entities = extract_entities(client, "车型规格换成冷链车", [], "2026-08-14 10:00")
     assert entities[0].action == "replace"
-    assert entities[0].type == "vehicle_type"
+    assert entities[0].type == "vehicle_specs"
+    assert entities[0].attributes["value"] == "cold_chain"
 
 
 # --- 4.2 实体类型覆盖与归一 ---

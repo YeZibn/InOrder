@@ -82,6 +82,18 @@
 
 ### `EXTRACTION_SYSTEM_PROMPT`（`extract/resolver.py`）
 
+#### 2026-08-17
+
+- **变更摘要**:
+  - 将 `vehicle_type` 收敛为基础车型和标准车长，并在 `attributes.value` 中使用车型目录 code。
+  - 将冷链、厢式、高栏、平板、危险品、高顶和尾板明确归入 `vehicle_specs`，每个规格独立输出。
+  - 增加冷链单规格、车长+冷链+厢式组合和车长+多规格 few-shot；保留 `extraction_text` 的用户原文。
+- **原因**: 原 prompt 将冷链车错误归为 `vehicle_type`，且车型与规格边界不清，无法为后续车型归一化提供稳定词汇契约。
+- **关联**: OpenSpec change `add-vehicle-catalog-and-spec-prompt`
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q` → 111 passed；`tests/test_extract.py` 已覆盖车型/规格边界、目录 code 和原文保留断言。
+  - 尚无真实 LLM 评测集，待补充。
+
 #### 2026-08-15
 
 - **变更摘要**:
