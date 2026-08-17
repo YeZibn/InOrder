@@ -114,6 +114,23 @@
 
 ---
 
+### `LANGEXTRACT_ORDER_PROMPT_DESCRIPTION`（`extract/langextract_adapter.py`）
+
+#### 2026-08-17
+
+- **变更摘要**:
+  - 新增 LangExtract grounded extraction 描述与订单 few-shot，要求只提取可在原文定位的 `cargo`、`location`、`vehicle_type`、`vehicle_specs`、`time`、`phone` 和 `remark`。
+  - 明确业务字段和 `action` 均由 LLM 放在 attributes，地址按“从 A 到 B”标注 `pickup` / `dropoff`；模型未识别实体时允许返回空提取。
+- **原因**: LLM 是订单语义的唯一决策方；adapter 不得因关键词、正则或实体顺序将模型输出重新解释为错误、默认 action 或地址角色。grounded prompt 通过原文片段和对齐元数据保留可解释性。
+- **关联**: OpenSpec change `rebuild-extract-with-langextract`。
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q tests/test_langextract_adapter.py tests/test_extract.py tests/test_context.py tests/test_order_processing_graph.py tests/test_intent_cli.py tests/test_llm_client.py` → 72 passed, 1 skipped。
+  - `INORDER_LLM_LIVE_TESTS=1 conda run -n agent python -m pytest -s -q tests/test_langextract_adapter.py` → 8 passed；`一吨苹果从温州到上海` 返回非空 cargo 与 pickup/dropoff。
+  - 移除本地语义补全后的聚焦回归：`conda run -n agent python -m pytest -q tests/test_langextract_adapter.py tests/test_extract.py tests/test_context.py tests/test_order_processing_graph.py tests/test_intent_cli.py` → 62 passed, 1 skipped。
+  - 断言位于 `tests/test_langextract_adapter.py`；尚无系统化真实 LLM 评测集，待补充。
+
+---
+
 ### `REWRITE_SYSTEM_PROMPT`（`rewrite/resolver.py`）
 
 #### 2026-08-15

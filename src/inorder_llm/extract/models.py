@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Literal, Mapping
+from typing import Any, Dict, Literal, Mapping, Optional
 
 Action = Literal["add", "set", "remove", "replace"]
 
@@ -22,4 +22,22 @@ class Entity:
         return result
 
 
-__all__ = ["Entity", "Action"]
+@dataclass(frozen=True)
+class GroundedExtraction:
+    """Backend-neutral grounded extraction preserving source evidence."""
+
+    extraction_class: str
+    extraction_text: str
+    attributes: Mapping[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "extraction_class": self.extraction_class,
+            "extraction_text": self.extraction_text,
+            "attributes": dict(self.attributes),
+            "metadata": dict(self.metadata),
+        }
+
+
+__all__ = ["Entity", "GroundedExtraction", "Action"]

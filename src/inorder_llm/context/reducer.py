@@ -31,6 +31,15 @@ def _value(entity: Entity) -> Any:
     return attrs.get("extraction_text") or entity.extraction_text
 
 
+def _action(entity: Entity) -> str:
+    value = entity.attributes.get("action")
+    return value if value in ("add", "set", "remove", "replace") else entity.action
+
+
+def _business_attributes(entity: Entity) -> Dict[str, Any]:
+    return {key: value for key, value in entity.attributes.items() if key != "action"}
+
+
 def _number(value: Any) -> Optional[float]:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
@@ -73,7 +82,7 @@ class OrderContextReducer:
         elif entity.type == "time":
             if entity.attributes.get("context") == "history":
                 raise ContextReductionError("history time cannot update delivery_time")
-            self._single(context, "delivery_time", dict(entity.attributes), entity)
+            self._single(context, "delivery_time", _business_attributes(entity), entity)
         elif entity.type == "cargo":
             self._cargo(context, entity)
         elif entity.type == "vehicle_specs":
@@ -90,13 +99,13 @@ class OrderContextReducer:
         field_name = {"pickup": "pickup_location", "dropoff": "dropoff_location"}.get(role)
         if not field_name:
             raise ContextReductionError("location entity requires pickup or dropoff role")
-        self._single(context, field_name, dict(entity.attributes), entity)
+        self._single(context, field_name, _business_attributes(entity), entity)
 
     def _person(self, context, entity):
         role = entity.attributes.get("role")
         if role not in ("sender", "receiver"):
             raise ContextReductionError("person entity requires sender or receiver role")
-        self._single(context, role, dict(entity.attributes), entity)
+        self._single(context, role, _business_attributes(entity), entity)
 
     def _phone(self, context, entity):
         role = entity.attributes.get("role")
@@ -106,25 +115,27 @@ class OrderContextReducer:
         self._single(context, field_name, _value(entity), entity)
 
     def _single(self, context, field_name: str, value: Any, entity: Entity):
-        if entity.action in ("set", "replace"):
+        action = _action(entity)
+        if action in ("set", "replace"):
             setattr(context, field_name, value)
-        elif entity.action == "remove":
+        elif action == "remove":
             setattr(context, field_name, None)
-        elif entity.action == "add":
+        elif action == "add":
             raise ContextReductionError("add is not supported for scalar field: " + field_name)
 
     def _cargo(self, context, entity: Entity):
-        attrs = dict(entity.attributes)
+        attrs = _business_attributes(entity)
         name = attrs.get("name") or entity.extraction_text
         index = next((i for i, item in enumerate(context.cargo) if item.get("name") == name), None)
-        if entity.action in ("set", "replace"):
+        action = _action(entity)
+        if action in ("set", "replace"):
             item = attrs or {"name": name}
             item.setdefault("name", name)
             if index is None: context.cargo.append(item)
             else: context.cargo[index] = item
-        elif entity.action == "remove":
+        elif action == "remove":
             context.cargo = [item for item in context.cargo if item.get("name") != name]
-        elif entity.action == "add":
+        elif action == "add":
             if index is None:
                 context.cargo.append(attrs or {"name": name})
             else:
@@ -134,18 +145,20 @@ class OrderContextReducer:
 
     def _list(self, context, field_name: str, value: Any, entity: Entity):
         values = value if isinstance(value, list) else [value]
-        if entity.action in ("set", "replace"): setattr(context, field_name, list(values))
-        elif entity.action == "add":
+        action = _action(entity)
+        if action in ("set", "replace"): setattr(context, field_name, list(values))
+        elif action == "add":
             current = getattr(context, field_name)
             for item in values:
                 if item not in current: current.append(item)
-        elif entity.action == "remove": setattr(context, field_name, [item for item in getattr(context, field_name) if item not in values])
+        elif action == "remove": setattr(context, field_name, [item for item in getattr(context, field_name) if item not in values])
 
     def _remark(self, context, entity):
         value = str(_value(entity))
-        if entity.action in ("set", "replace"): context.remark = value
-        elif entity.action == "add": context.remark = value if not context.remark else context.remark + ";" + value
-        elif entity.action == "remove": context.remark = None if context.remark == value else context.remark
+        action = _action(entity)
+        if action in ("set", "replace"): context.remark = value
+        elif action == "add": context.remark = value if not context.remark else context.remark + ";" + value
+        elif action == "remove": context.remark = None if context.remark == value else context.remark
 
 
 __all__ = ["ContextReductionError", "OrderContextReducer"]

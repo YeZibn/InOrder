@@ -36,7 +36,7 @@ def call_llm(state, client: LLMClient):
     return {"messages": [ChatMessage("assistant", response.text)]}
 ```
 
-当前版本只支持同步文本调用，不包含 LangGraph 图、订单状态、流式输出或工具调用。
+当前版本支持同步文本调用和用于订单语义解析的 LangGraph 子图；不包含流式输出、工具调用或外部订单服务。
 
 ## 意图规划子图
 
@@ -99,7 +99,7 @@ order   下单链路：只运行订单处理子图
 /exit               退出
 ```
 
-`full` 链路识别为 `order` 时会继续进入 rewrite → clarification → extract 订单处理子图；`intent` 和 `order` 可用于单独调试对应链路。当前 CLI 只做意图识别和订单语义解析，不执行归一化、reducer、历史订单查询、草稿修改、创建订单、确认下单或真实问答。
+`full` 链路识别为 `order` 时会继续进入 rewrite → clarification → extract → context update 订单处理子图；`intent` 和 `order` 可用于单独调试对应链路。当前 CLI 只做意图识别、订单语义解析和内存订单上下文更新，不执行归一化、历史订单查询、草稿修改、创建订单、确认下单或真实问答。
 
 普通消息成功处理后，CLI 会在当前内存会话中追加一条精简的 assistant 处理摘要；不会保存完整实体 JSON、订单上下文、原始 LLM content 或错误堆栈。`/context` 和 `/conversation` 是只读查看命令，不会调用 graph 或修改会话。
 
@@ -107,6 +107,18 @@ order   下单链路：只运行订单处理子图
 
 ```bash
 PYTHONPATH=src python -m inorder_llm.commands.intent_chat
+```
+
+### Grounded Extract
+
+订单实体提取默认使用 `langextract==1.6.0`。它保留原文片段、字符位置与对齐状态，再映射为现有的 `Entity`，供订单上下文 reducer 消费；`action`、地址角色及其他业务 attributes 必须由 LLM 输出，adapter 不会补默认值或按关键词重新判断。
+
+`EXTRACTOR_BACKEND=langextract` 为默认配置。LangExtract 调用失败时不会自动回退，避免同一会话混用两种提取语义。仅在迁移排障时可显式设为 `EXTRACTOR_BACKEND=json` 使用旧 JSON 提取器，问题排除后应恢复默认值。
+
+可选的真实网关验证不会在普通测试中运行：
+
+```bash
+INORDER_LLM_LIVE_TESTS=1 conda run -n agent python -m pytest -s -q tests/test_langextract_adapter.py
 ```
 
 ### LLM 多角色身份探针

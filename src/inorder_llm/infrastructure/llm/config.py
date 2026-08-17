@@ -18,6 +18,7 @@ class LLMConfig:
     max_retries: int = 2
     backoff_seconds: float = 0.5
     reasoning_effort: str = None
+    extractor_backend: str = "langextract"
 
 
 def load_config(environ=None) -> LLMConfig:
@@ -38,4 +39,16 @@ def load_config(environ=None) -> LLMConfig:
     reasoning_effort = env.get("LLM_REASONING_EFFORT") or None
     if reasoning_effort not in (None, "low", "medium", "high"):
         raise ConfigurationError("LLM_REASONING_EFFORT must be one of: low, medium, high")
-    return LLMConfig(env["LLM_API_KEY"], env["LLM_BASE_URL"], env["LLM_MODEL"], timeout, max_retries, backoff, reasoning_effort)
+    extractor_backend = env.get("EXTRACTOR_BACKEND", "langextract")
+    if extractor_backend not in ("langextract", "json"):
+        raise ConfigurationError("EXTRACTOR_BACKEND must be one of: langextract, json")
+    return LLMConfig(
+        env["LLM_API_KEY"],
+        env["LLM_BASE_URL"],
+        env["LLM_MODEL"],
+        timeout,
+        max_retries,
+        backoff,
+        reasoning_effort,
+        extractor_backend,
+    )
