@@ -1,0 +1,72 @@
+# order-processing-subgraph Specification
+
+## Purpose
+
+为订单输入提供一个独立、可测试且仅负责语义解析的 LangGraph 子图，将上下文重写、澄清分流和实体提取串联起来，为后续归一化与订单草稿更新提供稳定输入。
+
+## Requirements
+
+### Requirement: Provide an order processing subgraph
+
+系统 SHALL 提供独立的订单处理子图，接收本轮用户消息、参考时间、`HistoryConversation` 和 `OrderContext`，并返回重写结果、实体列表及澄清状态。
+
+#### Scenario: Subgraph accepts order parsing state
+
+- **WHEN** 调用方提供有效的用户消息、参考时间、历史对话和订单上下文
+- **THEN** 子图能够完成订单语义解析并返回结构化结果
+
+#### Scenario: Subgraph does not mutate context
+
+- **WHEN** 子图完成一次解析
+- **THEN** 输入的历史对话和 `OrderContext` 保持不变，子图不写入订单草稿
+
+### Requirement: Rewrite before extraction
+
+系统 SHALL 先使用当前消息、历史对话和订单上下文生成 rewrite 结果，再将 rewrite 结果中的 `extraction_text` 提供给实体提取阶段。
+
+#### Scenario: Extract incremental request after rewrite
+
+- **WHEN** 当前订单已有一吨苹果，用户输入“再加一吨苹果”
+- **THEN** 子图保留 rewrite 的增量动作语义，并将对应 `extraction_text` 用于提取 `cargo` 的 `add` entity
+
+#### Scenario: Extraction uses rewritten extraction text
+
+- **WHEN** rewrite 成功返回 `extraction_text`
+- **THEN** extract 阶段使用该文本，而不是再次基于原始消息独立推理上下文
+
+### Requirement: Route clarification before extraction
+
+系统 SHALL 在 rewrite 返回 `needs_clarification=true` 时进入澄清出口，不得调用实体提取器。
+
+#### Scenario: Ambiguous rewrite stops extraction
+
+- **WHEN** 用户输入无法根据历史和当前上下文唯一确定目标，rewrite 返回澄清标记
+- **THEN** 子图返回澄清原因和 rewrite 结果，实体列表为空，extract 不被调用
+
+#### Scenario: Successful rewrite reaches extraction
+
+- **WHEN** rewrite 返回 `needs_clarification=false`
+- **THEN** 子图继续调用 extract，并返回提取出的实体列表
+
+### Requirement: Keep parsing-only boundary
+
+订单处理子图 SHALL 只负责 rewrite、澄清路由和实体提取，不执行时间/手机号/枚举/车型归一化，不调用 reducer、历史订单服务、订单创建或确认工具。
+
+#### Scenario: Parsing does not normalize or reduce
+
+- **WHEN** 子图提取出带 action 的订单实体
+- **THEN** 子图返回原始实体结果，不更新 `OrderContext`，不执行其他业务副作用
+
+### Requirement: Surface structured failures
+
+系统 SHALL 将 rewrite 或 extract 的结构化输出错误作为子图调用错误暴露，不返回部分成功结果。
+
+#### Scenario: Invalid rewrite output
+
+- **WHEN** rewrite 模型返回非法 JSON 或缺失必需字段
+- **THEN** 子图调用失败并暴露结构化错误，不调用 extract
+
+#### Scenario: Invalid extraction output
+
+- **WHEN** rewrite 成功但 extract 模型返回非法结构
+- **THEN** 子图调用失败并暴露结构化错误，不产生可被误用的部分结果
