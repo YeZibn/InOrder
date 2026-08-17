@@ -1,10 +1,10 @@
 # Prompt 变更记录
 
-本文件记录 `inorder_llm` 中所有 LLM prompt 的变更、原因与评测结果。按 **prompt 常量** 分层组织，每个 prompt 下按日期排列变更，以体现渐进式进化。当前覆盖 `intent/resolver.py`（`MAIN_INTENT_SYSTEM_PROMPT` / `SUB_INTENT_SYSTEM_PROMPT`）与 `extract/resolver.py`（`EXTRACTION_SYSTEM_PROMPT`）；后续新增的 prompt 常量同样在此记录。
+本文件记录 `inorder_llm` 中所有 LLM prompt 的变更、原因与评测结果。按 **prompt 常量** 分层组织，每个 prompt 下按日期倒序排列变更（最新记录在前，最早记录在后），以便优先查看当前规则。当前覆盖 `intent/resolver.py`（`MAIN_INTENT_SYSTEM_PROMPT` / `SUB_INTENT_SYSTEM_PROMPT`）与 `extract/resolver.py`（`EXTRACTION_SYSTEM_PROMPT`）；后续新增的 prompt 常量同样在此记录。
 
 ## 记录格式
 
-每个 prompt 常量为一个 `###` 标题（标注所在文件），其下按日期（`####`）追加变更记录。每条记录包含以下字段：
+每个 prompt 常量为一个 `###` 标题（标注所在文件），其下按日期（`####`）倒序排列变更记录。每条记录包含以下字段：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -16,23 +16,11 @@
 
 > 评测结果应尽量给出可复现的依据（命令、用例、得分），而不只是「通过」。
 
+> **时间顺序约定**：同一 prompt 下日期必须严格按倒序排列，最新日期放在最前面；新增记录必须插入到该 prompt 标题后的第一条记录，不得直接追加到历史记录末尾。不同 prompt 之间仍按代码模块的既有分组顺序排列。
+
 ## 记录
 
 ### `MAIN_INTENT_SYSTEM_PROMPT`（`intent/resolver.py`）
-
-#### 2026-08-14
-
-- **变更摘要**:
-  - prompt 由英文短字符串拼接改为中文完整结构化 prompt（定义、规则、边界示例、严格 JSON schema）。
-  - 用户消息不再拼进 system 指令，改为作为独立 user message 发送（`_json_call` 发 system + user 两条 `ChatMessage`）。
-  - 明确 `order`/`qa` 二分类与「执行优先」规则（同时包含信息询问和执行请求时归 order）。
-- **原因**: 主意图从 `order/qa/ambiguous` 三分类收敛为二分类，需要 prompt 明确「执行请求 vs 信息询问」边界；旧 prompt 把用户消息拼进 system 存在注入面且规则不清，输出不稳定。
-- **关联**: OpenSpec change `simplify-intent-classification-and-prompts`（已归档至 `openspec/changes/archive/2026-08-14-simplify-intent-classification-and-prompts/`）
-- **评测结果**:
-  - `conda run -n agent python -m pytest -q` → 27 passed。
-  - `tests/test_intent_resolver.py`：prompt 内容断言（执行优先、JSON schema 关键词）与消息角色断言（system/user 顺序、user 内容=输入）。
-  - 图路由测试 `tests/test_intent_graph.py` 通过（`order`→子意图、`qa`→跳过、`order` 无子意图→澄清）。
-  - 尚无真实 LLM 评测集；分类准确率待后续建立评测集后补充。
 
 #### 2026-08-15
 
@@ -49,9 +37,34 @@
   - `tests/test_intent_graph.py`：新增 `test_business_goal_message_routes_to_order`、`test_capability_inquiry_message_routes_to_qa`。
   - 尚无真实 LLM 评测集；分类准确率待评测集补充。
 
+#### 2026-08-14
+
+- **变更摘要**:
+  - prompt 由英文短字符串拼接改为中文完整结构化 prompt（定义、规则、边界示例、严格 JSON schema）。
+  - 用户消息不再拼进 system 指令，改为作为独立 user message 发送（`_json_call` 发 system + user 两条 `ChatMessage`）。
+  - 明确 `order`/`qa` 二分类与「执行优先」规则（同时包含信息询问和执行请求时归 order）。
+- **原因**: 主意图从 `order/qa/ambiguous` 三分类收敛为二分类，需要 prompt 明确「执行请求 vs 信息询问」边界；旧 prompt 把用户消息拼进 system 存在注入面且规则不清，输出不稳定。
+- **关联**: OpenSpec change `simplify-intent-classification-and-prompts`（已归档至 `openspec/changes/archive/2026-08-14-simplify-intent-classification-and-prompts/`）
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q` → 27 passed。
+  - `tests/test_intent_resolver.py`：prompt 内容断言（执行优先、JSON schema 关键词）与消息角色断言（system/user 顺序、user 内容=输入）。
+  - 图路由测试 `tests/test_intent_graph.py` 通过（`order`→子意图、`qa`→跳过、`order` 无子意图→澄清）。
+  - 尚无真实 LLM 评测集；分类准确率待后续建立评测集后补充。
+
 ---
 
 ### `SUB_INTENT_SYSTEM_PROMPT`（`intent/resolver.py`）
+
+#### 2026-08-15
+
+- **变更摘要**:
+  - `create_order` 加入「运货/发货/配送/托运等运输需求均映射为此子意图」领域映射。
+- **原因**: 主意图已将业务目标词（运货/发货等）纳入 `order`，子意图层需同步覆盖，避免主意图判 `order` 但子意图无法匹配 `create_order`。
+- **关联**: OpenSpec change `broaden-order-intent-to-business-goals`（已归档）
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q` → 29 passed。
+  - 无新增 SUB 专属断言（本次改动为单行领域映射补充，回归通过即可）。
+  - 尚无真实 LLM 评测集。
 
 #### 2026-08-14
 
@@ -65,17 +78,6 @@
   - `conda run -n agent python -m pytest -q` → 27 passed。
   - `tests/test_intent_resolver.py`：prompt 内容断言（保守提取、`depends_on`、JSON schema 关键词）。
   - 图路由测试 `tests/test_intent_graph.py` 通过。
-  - 尚无真实 LLM 评测集。
-
-#### 2026-08-15
-
-- **变更摘要**:
-  - `create_order` 加入「运货/发货/配送/托运等运输需求均映射为此子意图」领域映射。
-- **原因**: 主意图已将业务目标词（运货/发货等）纳入 `order`，子意图层需同步覆盖，避免主意图判 `order` 但子意图无法匹配 `create_order`。
-- **关联**: OpenSpec change `broaden-order-intent-to-business-goals`（已归档）
-- **评测结果**:
-  - `conda run -n agent python -m pytest -q` → 29 passed。
-  - 无新增 SUB 专属断言（本次改动为单行领域映射补充，回归通过即可）。
   - 尚无真实 LLM 评测集。
 
 ---
