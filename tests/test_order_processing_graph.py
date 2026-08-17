@@ -26,8 +26,8 @@ class FakeExtractor:
         self.error = error
         self.calls = []
 
-    def extract(self, message, history, reference_time):
-        self.calls.append((message, history, reference_time))
+    def extract(self, message, reference_time):
+        self.calls.append((message, reference_time))
         if self.error:
             raise self.error
         return self.entities
@@ -65,8 +65,7 @@ def test_order_processing_graph_rewrites_then_extracts_incremental_text():
     assert len(rewrite.calls) == 1
     assert len(extractor.calls) == 1
     assert extractor.calls[0][0] == "再加一吨苹果"
-    assert extractor.calls[0][1] == history.as_llm_messages()
-    assert extractor.calls[0][2] == "2026-08-17 10:00"
+    assert extractor.calls[0][1] == "2026-08-17 10:00"
 
 
 def test_clarification_route_skips_extractor_and_returns_empty_entities():

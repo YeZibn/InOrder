@@ -4,6 +4,42 @@
 
 TBD: Define the order entity extraction capability and its observable output contract.
 ## Requirements
+### Requirement: Grounded prompt contract
+
+系统 SHALL 使用覆盖全部 14 类订单实体及其 attributes 的 grounded prompt 与 few-shot examples，使结构化输出约束允许每个类别和字段。prompt SHALL 明确原文定位、action 语义与空提取行为。
+
+#### Scenario: Complete schema coverage
+
+- **WHEN** 系统构建订单实体提取请求
+- **THEN** 结构化输出约束允许 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark 和 order_id
+
+### Requirement: Grounded source boundary
+
+系统 SHALL 仅从 rewrite 生成的待提取文本生成实体原文；reference time 仅用于时间计算，历史对话、订单上下文和输入标题不得作为实体来源。
+
+#### Scenario: Preserve current-turn grounding
+
+- **WHEN** 待提取文本为“再加一吨苹果”
+- **THEN** 系统不得从历史订单重新提取起终点等既有实体
+
+### Requirement: LLM semantic ownership
+
+系统 SHALL 由 LLM 决定实体类别、action、地址 role、业务 attributes 和规范 code。兼容层只可校验输出契约，不得补全、改写或重判语义。
+
+#### Scenario: Preserve LLM location role
+
+- **WHEN** LLM 输出 location role 为 dropoff
+- **THEN** 系统保留该 role，不得因实体顺序改写
+
+### Requirement: Grounded remark representation
+
+系统 SHALL 对 remark 保留用户原文为 extraction_text，并将业务概括放入 attributes.value。
+
+#### Scenario: Grounded fragile remark
+
+- **WHEN** 用户输入“苹果容易碎，轻拿轻放”
+- **THEN** remark 的 extraction_text 为该原文，attributes.value 为“易碎轻放”或等价概括
+
 ### Requirement: Order entity extraction
 
 系统 SHALL 在提取车型相关实体时区分基础车型/车长与车辆规格：基础车型和车长使用 `vehicle_type`，冷链、厢式、高栏、平板、危险品、高顶和尾板使用 `vehicle_specs`；同一输入中的基础车型和多个规格应分别输出实体，不得把车辆规格归为 `vehicle_type`。
@@ -138,4 +174,3 @@ extract 函数 SHALL 接受三个显式输入参数：`message`（用户本次�
 #### Scenario: Invalid JSON raises error
 - **WHEN** LLM 返回无法解析的 JSON
 - **THEN** 系统抛出 StructuredIntentError，包含原始输出和解析错误信息
-

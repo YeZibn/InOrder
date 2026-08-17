@@ -27,7 +27,7 @@
 
 ### Requirement: Rewrite before extraction
 
-系统 SHALL 先使用当前消息、历史对话和订单上下文生成 rewrite 结果，再将 rewrite 结果中的 `extraction_text` 提供给实体提取阶段。
+系统 SHALL 先使用当前消息、历史对话和订单上下文生成 rewrite 结果，再将 rewrite 结果中的 `extraction_text` 与 reference time 提供给实体提取阶段。实体提取阶段不得再次读取原始消息、历史对话或订单上下文。
 
 #### Scenario: Extract incremental request after rewrite
 
@@ -37,7 +37,7 @@
 #### Scenario: Extraction uses rewritten extraction text
 
 - **WHEN** rewrite 成功返回 `extraction_text`
-- **THEN** extract 阶段使用该文本，而不是再次基于原始消息独立推理上下文
+- **THEN** extract 阶段仅使用该文本与 reference time，而不是再次读取原始消息、历史或订单上下文
 
 ### Requirement: Route clarification before extraction
 

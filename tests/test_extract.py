@@ -215,9 +215,9 @@ def test_extract_history_injected_into_user_message():
     ]
     extract_entities(client, "上次那个再发一单", history, "2026-08-14 10:00")
     user_msg = client.calls[0][1].content
-    assert "【对话历史】" in user_msg
-    assert "我要下单从上海运货到温州" in user_msg
-    assert "已创建草稿" in user_msg
+    assert "【对话历史】" not in user_msg
+    assert "我要下单从上海运货到温州" not in user_msg
+    assert "已创建草稿" not in user_msg
     assert "上次那个再发一单" in user_msg
 
 

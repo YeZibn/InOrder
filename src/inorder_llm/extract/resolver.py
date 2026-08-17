@@ -6,6 +6,46 @@ from ..infrastructure.llm import ChatMessage, LLMClient
 from ..intent.resolver import StructuredIntentError
 from .models import Entity
 
+LANGEXTRACT_ORDER_PROMPT_DESCRIPTION = """你是物流订单 grounded entity extractor。仅从【待提取文本】选择连续原文作为 extraction_text；【参考时间】仅用于相对时间计算，不能作为实体来源。每个实体 attributes 必须包含 action，且 action 只能是 add、set、remove、replace，由模型决定。不得猜测、补全或重写用户未表达的字段；未识别实体时返回空提取。
+
+支持 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark、order_id。location 必须给 role=pickup/dropoff；time 给 context/start/end；车型和规格给目录 code 的 value。remark 的 extraction_text 为用户原文，attributes.value 为简短业务概括。"""
+
+
+def format_langextract_source(message: str, reference_time: str) -> str:
+    return f"【参考时间】{reference_time}\n【待提取文本】{message}"
+
+
+def build_langextract_order_examples():
+    """Return schema-covering grounded examples for LangExtract."""
+    from langextract.data import ExampleData, Extraction
+    return [
+        ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】两吨苹果从上海运到温州", [
+            Extraction("cargo", "两吨苹果", attributes={"action": "set", "name": "苹果", "weight": "2吨", "quantity": None, "volume": None, "dimensions": None}),
+            Extraction("location", "上海", attributes={"action": "set", "role": "pickup", "city": "上海"}),
+            Extraction("location", "温州", attributes={"action": "set", "role": "dropoff", "city": "温州"}),
+        ]),
+        ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】再加一吨苹果，4米2冷链厢式车", [
+            Extraction("cargo", "一吨苹果", attributes={"action": "add", "name": "苹果", "weight": "1吨", "quantity": None, "volume": None, "dimensions": None}),
+            Extraction("vehicle_type", "4米2", attributes={"action": "set", "value": "truck_4m2"}),
+            Extraction("vehicle_specs", "冷链", attributes={"action": "set", "value": "cold_chain"}),
+            Extraction("vehicle_specs", "厢式", attributes={"action": "set", "value": "enclosed"}),
+        ]),
+        ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】明天上午王强收，电话13800138000，苹果容易碎轻拿轻放", [
+            Extraction("time", "明天上午", attributes={"action": "set", "context": "new_order", "start": "2026-08-18 06:00", "end": "2026-08-18 12:00"}),
+            Extraction("person", "王强", attributes={"action": "set", "role": "receiver", "surname": "王", "name": "强"}),
+            Extraction("phone", "13800138000", attributes={"action": "set", "role": "receiver", "value": "13800138000"}),
+            Extraction("remark", "苹果容易碎轻拿轻放", attributes={"action": "set", "value": "易碎轻放"}),
+        ]),
+        ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】两人跟车，我跟车，到付不开票，快车，订单A123", [
+            Extraction("follow_car_number", "两人跟车", attributes={"action": "set", "value": 2}),
+            Extraction("oneself_follow_flag", "我跟车", attributes={"action": "set", "value": 1}),
+            Extraction("payment_type", "到付", attributes={"action": "set", "value": 0}),
+            Extraction("invoice_type", "不开票", attributes={"action": "set", "value": 1}),
+            Extraction("service_type", "快车", attributes={"action": "set", "value": "express"}),
+            Extraction("order_id", "订单A123", attributes={"action": "set", "context": "history"}),
+        ]),
+    ]
+
 EXTRACTION_SYSTEM_PROMPT = """你是物流订单实体提取器。从用户的自然语言输入中提取与下单相关的实体信息，按实体在原文中出现的顺序依次提取；除 remark 外尽量使用原文短语，不要改写。remark 必须用概括性词语精炼表达，勿逐字复述长句。
 
 输入第一行固定为「【参考时间】YYYY-MM-DD HH:MM（星期X）」，表示当前时间（系统时钟/中国时区），括号内为该日期对应的中文星期，用于辅助相对时间推理。所有相对时间表达均以该参考时间为基准换算为绝对时间。其后可能附带「【对话历史】」段，提供多轮上下文用于判断指代、省略与历史订单引用。
@@ -262,8 +302,9 @@ class EntityExtractor:
     def __init__(self, client: LLMClient):
         self.client = client
 
-    def extract(self, message: str, history: Sequence[Mapping[str, str]], reference_time: str) -> List[Entity]:
-        user_message = _build_user_message(message, history, reference_time)
+    def extract(self, message: str, history_or_reference, reference_time: str = None) -> List[Entity]:
+        reference_time = reference_time or history_or_reference
+        user_message = _build_user_message(message, [], reference_time)
         response = self.client.chat([
             ChatMessage("system", EXTRACTION_SYSTEM_PROMPT),
             ChatMessage("user", user_message),
@@ -274,15 +315,18 @@ class EntityExtractor:
 def extract_entities(
     client: LLMClient,
     message: str,
-    history: Sequence[Mapping[str, str]],
-    reference_time: str,
+    history_or_reference,
+    reference_time: str = None,
 ) -> List[Entity]:
     """便利函数：提取带 action 的订单实体。"""
-    return EntityExtractor(client).extract(message, history, reference_time)
+    return EntityExtractor(client).extract(message, history_or_reference, reference_time)
 
 
 __all__ = [
     "EXTRACTION_SYSTEM_PROMPT",
+    "LANGEXTRACT_ORDER_PROMPT_DESCRIPTION",
+    "build_langextract_order_examples",
+    "format_langextract_source",
     "EntityExtractor",
     "extract_entities",
     "parse_entities",

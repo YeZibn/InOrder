@@ -114,20 +114,30 @@
 
 ---
 
-### `LANGEXTRACT_ORDER_PROMPT_DESCRIPTION`（`extract/langextract_adapter.py`）
+### `LANGEXTRACT_ORDER_PROMPT_DESCRIPTION`（`extract/resolver.py`）
 
-#### 2026-08-17
+#### 2026-08-17T23:17:05+0800
 
 - **变更摘要**:
-  - 新增 LangExtract grounded extraction 描述与订单 few-shot，要求只提取可在原文定位的 `cargo`、`location`、`vehicle_type`、`vehicle_specs`、`time`、`phone` 和 `remark`。
-  - 明确业务字段和 `action` 均由 LLM 放在 attributes，地址按“从 A 到 B”标注 `pickup` / `dropoff`；模型未识别实体时允许返回空提取。
-- **原因**: LLM 是订单语义的唯一决策方；adapter 不得因关键词、正则或实体顺序将模型输出重新解释为错误、默认 action 或地址角色。grounded prompt 通过原文片段和对齐元数据保留可解释性。
-- **关联**: OpenSpec change `rebuild-extract-with-langextract`。
+  - prompt 与 schema-covering examples 移至 `extract/resolver.py`，覆盖 14 类订单实体；extract 仅消费 rewrite 文本和参考时间。
+  - 强制 examples 覆盖完整实体类型与 attributes，使 LangExtract strict schema 不再仅允许 cargo/location。
+  - 明确 LLM 是 action、地址 role 与业务字段的唯一决策方；原文 remark 与摘要 value 分离。
+- **原因**: 初始 prompt 的 examples 只能生成 cargo/location schema，且 extract 读取 history 可能重新提取旧订单实体。
+- **关联**: OpenSpec change `strengthen-langextract-prompt-contract`（已归档）。
 - **评测结果**:
-  - `conda run -n agent python -m pytest -q tests/test_langextract_adapter.py tests/test_extract.py tests/test_context.py tests/test_order_processing_graph.py tests/test_intent_cli.py tests/test_llm_client.py` → 72 passed, 1 skipped。
-  - `INORDER_LLM_LIVE_TESTS=1 conda run -n agent python -m pytest -s -q tests/test_langextract_adapter.py` → 8 passed；`一吨苹果从温州到上海` 返回非空 cargo 与 pickup/dropoff。
-  - 移除本地语义补全后的聚焦回归：`conda run -n agent python -m pytest -q tests/test_langextract_adapter.py tests/test_extract.py tests/test_context.py tests/test_order_processing_graph.py tests/test_intent_cli.py` → 62 passed, 1 skipped。
+  - `conda run -n agent python -m pytest -q` → 147 passed, 2 skipped。
+  - `INORDER_LLM_LIVE_TESTS=1 conda run -n agent python -m pytest -q tests/test_langextract_adapter.py` → 15 passed，覆盖基础订单、车型规格与 remark。
   - 断言位于 `tests/test_langextract_adapter.py`；尚无系统化真实 LLM 评测集，待补充。
+
+#### 2026-08-17（历史记录，精确时间未保存）
+
+- **变更摘要**:
+  - 初始引入 LangExtract grounded extraction description 与 cargo/location few-shot。
+  - 将 action 放入 attributes，并保留原文片段与对齐元数据。
+- **原因**: 替代旧 JSON 提取器，减少合法 JSON 但语义为空的提取结果。
+- **关联**: OpenSpec change `rebuild-extract-with-langextract`（已归档）。
+- **评测结果**:
+  - 初始 adapter 聚焦测试与真实基础订单探针通过；精确命令统计已由后续完整契约记录取代。
 
 ---
 

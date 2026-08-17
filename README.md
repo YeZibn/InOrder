@@ -113,6 +113,8 @@ PYTHONPATH=src python -m inorder_llm.commands.intent_chat
 
 订单实体提取默认使用 `langextract==1.6.0`。它保留原文片段、字符位置与对齐状态，再映射为现有的 `Entity`，供订单上下文 reducer 消费；`action`、地址角色及其他业务 attributes 必须由 LLM 输出，adapter 不会补默认值或按关键词重新判断。
 
+提取只消费 rewrite 生成的本轮文本和参考时间；历史对话与订单上下文只用于 rewrite，避免把已有订单字段重新提取为本轮变更。LangExtract 的 prompt 与 schema-covering examples 定义在 `extract/resolver.py`。
+
 `EXTRACTOR_BACKEND=langextract` 为默认配置。LangExtract 调用失败时不会自动回退，避免同一会话混用两种提取语义。仅在迁移排障时可显式设为 `EXTRACTOR_BACKEND=json` 使用旧 JSON 提取器，问题排除后应恢复默认值。
 
 可选的真实网关验证不会在普通测试中运行：

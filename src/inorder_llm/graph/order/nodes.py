@@ -39,7 +39,6 @@ class ExtractNode(BaseNode[OrderGraphState]):
         rewrite_result = state["rewrite_result"]
         entities = self.extractor.extract(
             rewrite_result.extraction_text,
-            state["history"].as_llm_messages(),
             state["reference_time"],
         )
         return {"entities": entities}
