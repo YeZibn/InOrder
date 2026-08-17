@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from inorder_llm.cli.app import CHAINS, CliSession, CommandParser, IntentCli, MODES
 from inorder_llm.context.models import HistoryConversation, OrderContext
 from inorder_llm.rewrite.models import RewriteResult
@@ -173,6 +177,53 @@ def test_order_chain_persists_updated_context_between_messages():
     assert cli.session.order_context.cargo == [{"name": "苹果", "weight": "1吨"}]
     output = cli.handle_message("继续")
     assert "订单上下文：已更新" in output
+
+
+def test_successful_message_appends_concise_assistant_summary_only():
+    cli = IntentCli(graph=FakeGraph())
+    cli.handle_message("我要下单")
+    turns = cli.session.history.turns
+    assert [turn.role for turn in turns] == ["user", "assistant"]
+    assistant = turns[-1]
+    assert "order" in assistant.content
+    assert "create_order" in assistant.content
+    assert "Entity" not in assistant.content
+    assert "OrderContext" not in assistant.content
+    assert "raw" not in assistant.content
+    assert assistant.metadata["chain"] == "full"
+
+
+def test_failed_graph_does_not_append_assistant_summary():
+    class FailingGraph:
+        def invoke(self, state):
+            raise RuntimeError("gateway failed")
+
+    cli = IntentCli(graph=FailingGraph())
+    with pytest.raises(RuntimeError, match="gateway failed"):
+        cli.handle_message("我要下单")
+    assert [turn.role for turn in cli.session.history.turns] == ["user"]
+
+
+def test_context_and_conversation_commands_are_read_only_json():
+    cli = IntentCli(graph=FakeGraph())
+    cli.session.history.append_user("历史输入")
+    cli.session.order_context = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
+    before = cli.session.to_dict() if hasattr(cli.session, "to_dict") else {
+        "history": cli.session.history.to_dict(),
+        "order_context": cli.session.order_context.to_dict(),
+    }
+    context = cli.handle_command("context")
+    conversation = cli.handle_command("conversation")
+    assert json.loads(context)["cargo"] == [{"name": "苹果", "weight": "1吨"}]
+    assert json.loads(conversation)["turns"][0]["content"] == "历史输入"
+    assert cli.session.history.to_dict() == before["history"]
+    assert cli.session.order_context.to_dict() == before["order_context"]
+
+
+def test_empty_inspection_commands_return_valid_json():
+    cli = IntentCli()
+    assert json.loads(cli.handle_command("context"))["cargo"] == []
+    assert json.loads(cli.handle_command("conversation"))["turns"] == []
 
 
 def test_clear_resets_history_and_order_context_but_keeps_chain():

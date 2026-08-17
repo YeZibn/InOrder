@@ -12,7 +12,7 @@ from .runners import ChainContext, FullChainRunner, IntentChainRunner, OrderChai
 CHAINS = ("full", "intent", "order")
 # Kept as a public compatibility alias for callers of the previous CLI.
 MODES = ("auto", "order", "qa", "plan")
-HELP_TEXT = "命令：/chain [full|intent|order]、/intent、/mode、/clear、/help、/exit"
+HELP_TEXT = "命令：/chain [full|intent|order]、/intent、/mode、/context、/conversation、/clear、/help、/exit"
 
 
 def _reference_time() -> str:
@@ -41,6 +41,55 @@ class CommandParser:
 
 def _data(value):
     return value.to_dict() if hasattr(value, "to_dict") else value
+
+
+def _intent_data(result):
+    plan = result.get("intent_plan") if isinstance(result, dict) else None
+    return _data(plan) if plan is not None else result
+
+
+def _assistant_summary(result, chain: str, mode: Optional[str] = None):
+    """Build a compact history turn and metadata from structured results."""
+    if isinstance(result, str):
+        return result, {"chain": chain}
+    if chain == "full":
+        intent_result = result.get("intent_result", result)
+        order_result = result.get("order_result")
+        if order_result is not None:
+            summary, metadata = _assistant_summary(order_result, "order")
+            intent = _intent_data(intent_result).get("main_intent")
+            metadata.update({"chain": "full", "main_intent": intent})
+            return (f"主意图：{intent}；" + summary), metadata
+        data = _intent_data(intent_result)
+        intent = data.get("main_intent") if isinstance(data, dict) else None
+        text = "主意图：" + str(intent or "未知")
+        sub = data.get("sub_intents", []) if isinstance(data, dict) else []
+        names = [(_data(item).get("name") or "") for item in sub]
+        if names:
+            text += "；子意图：" + "、".join(name for name in names if name)
+        if result.get("qa_placeholder"):
+            text += "；问答入口尚未实现"
+        return text, {"chain": "full", "main_intent": intent}
+    if chain == "order":
+        if result.get("needs_clarification"):
+            reason = result.get("clarification_reason") or "未提供原因"
+            return "需要澄清：" + str(reason) + "；Extract 未执行。", {
+                "chain": "order", "needs_clarification": True,
+                "order_context_updated": False,
+            }
+        count = result.get("entity_count", len(result.get("entities", [])))
+        updated = bool(result.get("order_context_updated"))
+        return f"订单解析完成；Extract 提取 {count} 个实体；订单上下文" + ("已更新。" if updated else "未更新。"), {
+            "chain": "order", "entity_count": count,
+            "order_context_updated": updated,
+        }
+    data = _intent_data(result)
+    intent = data.get("main_intent") if isinstance(data, dict) else None
+    sub = data.get("sub_intents", []) if isinstance(data, dict) else []
+    names = [(_data(item).get("name") or "") for item in sub]
+    text = "已识别主意图：" + str(intent or "未知")
+    if names: text += "；子意图：" + "、".join(name for name in names if name)
+    return text + "。", {"chain": "intent", "main_intent": intent}
 
 
 def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> str:
@@ -127,6 +176,10 @@ class IntentCli:
                 return "当前模式：" + self.session.mode
             return "当前链路：" + self.session.chain
         if command == "help": return HELP_TEXT
+        if command == "context":
+            return json.dumps(self.session.order_context.to_dict(), ensure_ascii=False, indent=2)
+        if command == "conversation":
+            return json.dumps(self.session.history.to_dict(), ensure_ascii=False, indent=2)
         if command == "clear":
             chain = self.session.chain
             self.session.messages.clear(); self.session.history = HistoryConversation(); self.session.order_context = OrderContext()
@@ -150,7 +203,10 @@ class IntentCli:
             order_result = result.get("order_result")
             if order_result and order_result.get("order_context") is not None:
                 self.session.order_context = order_result["order_context"]
-        return format_result(result, self.session.chain, self.session.mode)
+        output = format_result(result, self.session.chain, self.session.mode)
+        summary, metadata = _assistant_summary(result, self.session.chain, self.session.mode)
+        self.session.history.append_assistant(summary, metadata)
+        return output
 
     def run(self):
         self.output("InOrder[" + self.session.chain + "] 输入 /help 查看命令。")

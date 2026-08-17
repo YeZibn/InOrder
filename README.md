@@ -92,12 +92,16 @@ order   下单链路：只运行订单处理子图
 /chain order        切换下单链路
 /intent             兼容命令，切换意图链路
 /mode               查看当前链路或兼容模式
+/context            以 JSON 查看当前订单上下文
+/conversation       以 JSON 查看当前会话历史
 /clear              清空本地消息、历史和订单上下文
 /help               查看命令
 /exit               退出
 ```
 
 `full` 链路识别为 `order` 时会继续进入 rewrite → clarification → extract 订单处理子图；`intent` 和 `order` 可用于单独调试对应链路。当前 CLI 只做意图识别和订单语义解析，不执行归一化、reducer、历史订单查询、草稿修改、创建订单、确认下单或真实问答。
+
+普通消息成功处理后，CLI 会在当前内存会话中追加一条精简的 assistant 处理摘要；不会保存完整实体 JSON、订单上下文、原始 LLM content 或错误堆栈。`/context` 和 `/conversation` 是只读查看命令，不会调用 graph 或修改会话。
 
 如果不安装命令入口，也可以使用：
 
