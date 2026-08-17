@@ -47,6 +47,22 @@ def test_success_normalizes_response_and_messages():
     assert transport.calls[0][0][0].role == "user"
 
 
+def test_content_observer_receives_each_normalized_response():
+    transport = FakeTransport(response())
+    contents = []
+    LLMClient(config(), transport=transport, on_content=contents.append).chat([ChatMessage("user", "hi")])
+    assert contents == ["hello"]
+
+
+def test_normalized_response_exposes_finish_reason_and_refusal():
+    raw = response()
+    raw.choices[0].finish_reason = "stop"
+    raw.choices[0].message.refusal = None
+    result = LLMClient(config(), transport=FakeTransport(raw)).chat([ChatMessage("user", "hi")])
+    assert result.metadata["finish_reason"] == "stop"
+    assert result.metadata["refusal"] is None
+
+
 def test_empty_messages_are_rejected_without_transport_call():
     transport = FakeTransport(response())
     with pytest.raises(Exception):

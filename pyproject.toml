@@ -18,3 +18,8 @@ inorder = "inorder_llm.commands.intent_chat:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: live LLM gateway probe (opt-in with INORDER_LLM_LIVE_TESTS=1)",
+]

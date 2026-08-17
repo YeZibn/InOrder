@@ -75,24 +75,42 @@ graph/
 inorder
 ```
 
+CLI 提供三条可切换链路：
+
+```text
+full    完整链路：意图图 → order 时进入订单处理子图
+intent  意图链路：只运行意图图
+order   下单链路：只运行订单处理子图
+```
+
 支持：
 
 ```text
-/intent             选择模式提示
-/intent auto        切换自动模式
-/intent order       切换订单意图模式
-/intent qa          切换问答占位模式
-/intent plan        输出结构化 IntentPlan
-/mode               查看当前模式
-/clear              清空本地会话消息
+/chain              选择链路提示
+/chain full         切换完整链路
+/chain intent       切换意图链路
+/chain order        切换下单链路
+/intent             兼容命令，切换意图链路
+/mode               查看当前链路或兼容模式
+/clear              清空本地消息、历史和订单上下文
 /help               查看命令
 /exit               退出
 ```
 
-CLI 当前只做意图识别，不查询历史订单、不修改草稿、不创建订单、不确认下单，也不回答真实问答。
+`full` 链路识别为 `order` 时会继续进入 rewrite → clarification → extract 订单处理子图；`intent` 和 `order` 可用于单独调试对应链路。当前 CLI 只做意图识别和订单语义解析，不执行归一化、reducer、历史订单查询、草稿修改、创建订单、确认下单或真实问答。
 
 如果不安装命令入口，也可以使用：
 
 ```bash
 PYTHONPATH=src python -m inorder_llm.commands.intent_chat
 ```
+
+### LLM 多角色身份探针
+
+项目提供一个默认跳过的真实网关探针，用于检查模型在多角色指令下是否仍能识别自身身份并遵守 JSON 输出格式。运行时会打印每次 LLM 返回的原始 `content`：
+
+```bash
+INORDER_LLM_LIVE_TESTS=1 conda run -n agent python -m pytest -s -q tests/test_prompt_role_identity.py
+```
+
+该探针不要求固定的模型名称，但要求返回非空 JSON，并包含 `identity`、`active_roles` 和 `format_compliant` 字段。

@@ -1,5 +1,5 @@
 import time
-from typing import Any, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 from .config import LLMConfig
 from .errors import AuthenticationError, InvalidRequestError, RateLimitError, TimeoutError, UpstreamError
@@ -8,10 +8,17 @@ from .transport import ChatTransport, OpenAITransport
 
 
 class LLMClient:
-    def __init__(self, config: LLMConfig, transport: ChatTransport = None, sleep=time.sleep):
+    def __init__(
+        self,
+        config: LLMConfig,
+        transport: ChatTransport = None,
+        sleep=time.sleep,
+        on_content: Optional[Callable[[str], None]] = None,
+    ):
         self.config = config
         self.transport = transport or OpenAITransport(config)
         self._sleep = sleep
+        self._on_content = on_content
 
     def chat(self, messages: Sequence[ChatMessage]) -> LLMResponse:
         if not messages:
@@ -21,7 +28,10 @@ class LLMClient:
                 raise InvalidRequestError("each message requires a role and content")
         for attempt in range(self.config.max_retries + 1):
             try:
-                return self._normalize(self.transport.complete(messages, self.config))
+                response = self._normalize(self.transport.complete(messages, self.config))
+                if self._on_content is not None:
+                    self._on_content(response.text)
+                return response
             except Exception as exc:
                 error = self._normalize_error(exc)
                 retryable = isinstance(error, (TimeoutError, UpstreamError, RateLimitError))
@@ -35,7 +45,13 @@ class LLMClient:
         message = raw.choices[0].message
         usage_raw = getattr(raw, "usage", None)
         usage = None if usage_raw is None else Usage(getattr(usage_raw, "prompt_tokens", None), getattr(usage_raw, "completion_tokens", None), getattr(usage_raw, "total_tokens", None))
-        return LLMResponse(getattr(message, "content", "") or "", getattr(raw, "model", self.config.model), usage, {"id": getattr(raw, "id", None)})
+        content = getattr(message, "content", "") or ""
+        metadata = {
+            "id": getattr(raw, "id", None),
+            "finish_reason": getattr(raw.choices[0], "finish_reason", None),
+            "refusal": getattr(message, "refusal", None),
+        }
+        return LLMResponse(content, getattr(raw, "model", self.config.model), usage, metadata)
 
     @staticmethod
     def _normalize_error(exc: Exception):
