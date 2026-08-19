@@ -8,7 +8,7 @@ from .models import Entity
 
 LANGEXTRACT_ORDER_PROMPT_DESCRIPTION = """你是物流订单 grounded entity extractor。仅从【待提取文本】选择连续原文作为 extraction_text；【参考时间】仅用于相对时间计算，不能作为实体来源。每个实体 attributes 必须包含 action，且 action 只能是 add、set、remove、replace，由模型决定。不得猜测、补全或重写用户未表达的字段；未识别实体时返回空提取。
 
-支持 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark、order_id。location 必须给 role=pickup/dropoff；time 给 context/start/end；车型和规格给目录 code 的 value。remark 的 extraction_text 为用户原文，attributes.value 为简短业务概括。"""
+支持 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark、order_id。location 必须给 role=pickup/dropoff，并可包含用户明确表达的 city 与 full_address；full_address 必须来自待提取文本中的连续地址原文，不得补全或改写。time 给 context/start/end；车型和规格给目录 code 的 value。remark 的 extraction_text 为用户原文，attributes.value 为简短业务概括。"""
 
 
 def format_langextract_source(message: str, reference_time: str) -> str:
@@ -21,13 +21,17 @@ def build_langextract_order_examples():
     return [
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】两吨苹果从上海运到温州", [
             Extraction("cargo", "两吨苹果", attributes={"action": "set", "name": "苹果", "weight": "2吨", "quantity": None, "volume": None, "dimensions": None}),
-            Extraction("location", "上海", attributes={"action": "set", "role": "pickup", "city": "上海"}),
-            Extraction("location", "温州", attributes={"action": "set", "role": "dropoff", "city": "温州"}),
+            Extraction("location", "上海", attributes={"action": "set", "role": "pickup", "city": "上海", "full_address": "上海"}),
+            Extraction("location", "温州", attributes={"action": "set", "role": "dropoff", "city": "温州", "full_address": "温州"}),
         ]),
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】设置一吨苹果，起运地温州，目的地上海。", [
             Extraction("cargo", "一吨苹果", attributes={"action": "set", "name": "苹果", "weight": "1吨", "quantity": None, "volume": None, "dimensions": None}),
-            Extraction("location", "温州", attributes={"action": "set", "role": "pickup", "city": "温州"}),
-            Extraction("location", "上海", attributes={"action": "set", "role": "dropoff", "city": "上海"}),
+            Extraction("location", "温州", attributes={"action": "set", "role": "pickup", "city": "温州", "full_address": "温州"}),
+            Extraction("location", "上海", attributes={"action": "set", "role": "dropoff", "city": "上海", "full_address": "上海"}),
+        ]),
+        ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】从上海浦东金桥物流园3号仓库运到温州瓯海批发市场", [
+            Extraction("location", "上海浦东金桥物流园3号仓库", attributes={"action": "set", "role": "pickup", "city": "上海", "full_address": "上海浦东金桥物流园3号仓库"}),
+            Extraction("location", "温州瓯海批发市场", attributes={"action": "set", "role": "dropoff", "city": "温州", "full_address": "温州瓯海批发市场"}),
         ]),
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】再加一吨苹果，4米2冷链厢式车", [
             Extraction("cargo", "一吨苹果", attributes={"action": "add", "name": "苹果", "weight": "1吨", "quantity": None, "volume": None, "dimensions": None}),
@@ -90,7 +94,8 @@ time —— 时间表达式
 
 location —— 地址
 - role：pickup（装货地）或 dropoff（卸货地）
-- city：仅当用户明确提及城市名时输出，不带"市"后缀
+- city：仅当用户明确提及城市名时输出，不带"市"后缀；无法确定时不要猜测
+- full_address：用户本轮明确表达的完整地址连续原文，至少保留城市表达；只有城市时与城市表达相同。不得从上下文补全、拆分、标准化或改写地址
 
 person —— 人名/称呼
 - role：sender（发货人）或 receiver（收货人）
@@ -179,7 +184,13 @@ Few-shot 示例：
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：我要两吨苹果从上海运到温州
 输出：
-{"entities":[{"type":"cargo","action":"set","extraction_text":"两吨苹果","attributes":{"name":"苹果","weight":"2吨"}},{"type":"location","action":"set","extraction_text":"上海","attributes":{"role":"pickup","city":"上海"}},{"type":"location","action":"set","extraction_text":"温州","attributes":{"role":"dropoff","city":"温州"}}]}
+{"entities":[{"type":"cargo","action":"set","extraction_text":"两吨苹果","attributes":{"name":"苹果","weight":"2吨"}},{"type":"location","action":"set","extraction_text":"上海","attributes":{"role":"pickup","city":"上海","full_address":"上海"}},{"type":"location","action":"set","extraction_text":"温州","attributes":{"role":"dropoff","city":"温州","full_address":"温州"}}]}
+
+示例2a（详细地址）：
+输入：【参考时间】2026-08-14 10:00（星期五）
+用户：从上海市浦东新区金桥镇某物流园A区3号仓库送到浙江省温州市瓯海区某批发市场
+输出：
+{"entities":[{"type":"location","action":"set","extraction_text":"上海市浦东新区金桥镇某物流园A区3号仓库","attributes":{"role":"pickup","city":"上海","full_address":"上海市浦东新区金桥镇某物流园A区3号仓库"}},{"type":"location","action":"set","extraction_text":"浙江省温州市瓯海区某批发市场","attributes":{"role":"dropoff","city":"温州","full_address":"浙江省温州市瓯海区某批发市场"}}]}
 
 示例3（remove）：
 输入：【参考时间】2026-08-14 10:00（星期五）
@@ -278,6 +289,32 @@ def parse_entities_from_text(text: str) -> List[Entity]:
     return parse_entities(value)
 
 
+def _validate_location_attributes(entities: Sequence[Entity], source_text: str) -> None:
+    """Validate address fields without normalizing or inferring their meaning."""
+    for index, entity in enumerate(entities):
+        if entity.type != "location":
+            continue
+        attrs = entity.attributes
+        role = attrs.get("role")
+        if role not in ("pickup", "dropoff"):
+            raise StructuredIntentError(
+                f"entity[{index}] location role must be pickup or dropoff"
+            )
+        city = attrs.get("city")
+        if city is not None and (not isinstance(city, str) or not city.strip()):
+            raise StructuredIntentError(f"entity[{index}] location city must be a non-empty string or null")
+        full_address = attrs.get("full_address")
+        if full_address is not None:
+            if not isinstance(full_address, str) or not full_address.strip():
+                raise StructuredIntentError(
+                    f"entity[{index}] location full_address must be a non-empty string or null"
+                )
+            if full_address not in source_text:
+                raise StructuredIntentError(
+                    f"entity[{index}] location full_address must come from the extraction source"
+                )
+
+
 def _format_reference_time(reference_time: str) -> str:
     dt = datetime.strptime(reference_time, "%Y-%m-%d %H:%M")
     return f"【参考时间】{reference_time}（{_WEEKDAY_CN[dt.weekday()]}）"
@@ -314,7 +351,9 @@ class EntityExtractor:
             ChatMessage("system", EXTRACTION_SYSTEM_PROMPT),
             ChatMessage("user", user_message),
         ])
-        return parse_entities_from_text(response.text)
+        entities = parse_entities_from_text(response.text)
+        _validate_location_attributes(entities, message)
+        return entities
 
 
 def extract_entities(

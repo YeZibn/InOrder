@@ -35,6 +35,45 @@ def test_mapper_preserves_llm_semantic_attributes_without_inference():
     assert entities[1].attributes == {"name": "苹果", "action": "remove"}
 
 
+def test_mapper_preserves_location_city_and_full_address():
+    entities = map_grounded_extractions(
+        [
+            GroundedExtraction(
+                "location",
+                "上海浦东金桥物流园3号仓库",
+                {
+                    "role": "pickup",
+                    "city": "上海",
+                    "full_address": "上海浦东金桥物流园3号仓库",
+                    "action": "set",
+                },
+            )
+        ],
+        "从上海浦东金桥物流园3号仓库装货",
+    )
+    assert entities[0].attributes["city"] == "上海"
+    assert entities[0].attributes["full_address"] == "上海浦东金桥物流园3号仓库"
+
+
+def test_mapper_rejects_location_full_address_outside_source():
+    with pytest.raises(StructuredIntentError, match="full_address"):
+        map_grounded_extractions(
+            [
+                GroundedExtraction(
+                    "location",
+                    "上海",
+                    {
+                        "role": "pickup",
+                        "city": "上海",
+                        "full_address": "上海浦东某仓库",
+                        "action": "set",
+                    },
+                )
+            ],
+            "从上海装货",
+        )
+
+
 def test_empty_grounded_output_is_preserved_for_any_input():
     assert map_grounded_extractions([], "一吨苹果从温州到上海") == []
     assert map_grounded_extractions([], "你好") == []
@@ -122,6 +161,9 @@ def test_langextract_examples_align_chinese_entity_spans():
         ("温州", "location"),
         ("上海", "location"),
     ]
+    detailed = examples[2]
+    assert detailed.extractions[0].attributes["full_address"] == "上海浦东金桥物流园3号仓库"
+    assert detailed.extractions[1].attributes["full_address"] == "温州瓯海批发市场"
 
 
 @pytest.mark.parametrize("text", ["苹果改成香蕉", "4米2冷链厢式车", "明天上午王强收货13800138000", "到付不开票快车", "苹果容易碎轻拿轻放", "你好"])

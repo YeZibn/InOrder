@@ -84,6 +84,19 @@
 
 ### `EXTRACTION_SYSTEM_PROMPT`（`extract/resolver.py`）
 
+#### 2026-08-19T16:25:21+0800
+
+- **变更摘要**:
+  - location 从仅提取 `city` 扩展为支持 `city` 与用户原文中的连续 `full_address`。
+  - 增加城市级、详细仓库/园区地址和缺少城市时保留完整地址的规则与示例。
+  - 明确不得从上下文补全、拆分、标准化或改写地址。
+- **原因**: 物流装卸地址不能只停留在城市级，需要保留园区、仓库和市场等具体地址，同时保持 grounded extraction 的原文边界。
+- **关联**: OpenSpec change `extend-location-address`。
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q tests/test_extract.py tests/test_langextract_adapter.py tests/test_context.py tests/test_order_processing_graph.py` → 69 passed, 1 skipped。
+  - `tests/test_extract.py` 覆盖详细地址、城市缺失、来源边界；`tests/test_context.py` 覆盖 pickup/dropoff 映射保留。
+  - 尚无真实 LLM 评测集，待补充。
+
 #### 2026-08-17
 
 - **变更摘要**:
@@ -115,6 +128,18 @@
 ---
 
 ### `LANGEXTRACT_ORDER_PROMPT_DESCRIPTION`（`extract/resolver.py`）
+
+#### 2026-08-19T16:25:21+0800
+
+- **变更摘要**:
+  - LangExtract location attributes 增加 `full_address`，并补充城市级与详细地址 few-shot。
+  - 适配层校验 `full_address` 必须来自当前 extraction source，不进行本地地址推断。
+- **原因**: 让 LangExtract backend 与 JSON backend 使用一致的 city/full_address 地址契约，并支持具体装卸点。
+- **关联**: OpenSpec change `extend-location-address`。
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q tests/test_extract.py tests/test_langextract_adapter.py tests/test_context.py tests/test_order_processing_graph.py` → 69 passed, 1 skipped。
+  - `tests/test_langextract_adapter.py` 覆盖 prompt alignment、详细地址保留和来源边界。
+  - 尚无真实 LLM 评测集，待补充。
 
 #### 2026-08-17T23:17:05+0800
 

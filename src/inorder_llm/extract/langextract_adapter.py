@@ -22,6 +22,13 @@ def _entity_from_grounded(item: GroundedExtraction) -> Entity:
     action = attrs.get("action")
     if action not in _VALID_ACTIONS:
         raise StructuredIntentError("grounded extraction requires attributes.action: add, set, remove, or replace")
+    if item.extraction_class == "location":
+        if attrs.get("role") not in ("pickup", "dropoff"):
+            raise StructuredIntentError("location requires attributes.role: pickup or dropoff")
+        for field_name in ("city", "full_address"):
+            value = attrs.get(field_name)
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise StructuredIntentError(f"location {field_name} must be a non-empty string or null")
     return Entity(item.extraction_class, action, attrs, item.extraction_text)
 
 
@@ -31,6 +38,9 @@ def map_grounded_extractions(
     """Copy LLM-decided grounded entities into the reducer-compatible model."""
     entities: List[Entity] = []
     for item in extractions:
+        if item.extraction_class == "location" and item.attributes.get("full_address") is not None:
+            if _source_text is not None and item.attributes["full_address"] not in _source_text:
+                raise StructuredIntentError("location full_address must come from the extraction source")
         entities.append(_entity_from_grounded(item))
     return entities
 

@@ -44,6 +44,42 @@ def test_reducer_scalar_replace_and_remove_is_pure():
     assert cleared.pickup_location is None
 
 
+def test_reducer_preserves_location_city_and_full_address():
+    context = OrderContextReducer().apply(
+        OrderContext(),
+        [
+            Entity(
+                "location",
+                "set",
+                {
+                    "role": "pickup",
+                    "city": "上海",
+                    "full_address": "上海浦东金桥物流园3号仓库",
+                },
+            ),
+            Entity(
+                "location",
+                "set",
+                {
+                    "role": "dropoff",
+                    "city": "温州",
+                    "full_address": "温州瓯海批发市场",
+                },
+            ),
+        ],
+    )
+    assert context.pickup_location == {
+        "role": "pickup",
+        "city": "上海",
+        "full_address": "上海浦东金桥物流园3号仓库",
+    }
+    assert context.dropoff_location == {
+        "role": "dropoff",
+        "city": "温州",
+        "full_address": "温州瓯海批发市场",
+    }
+
+
 def test_reducer_cargo_add_and_remove():
     reducer = OrderContextReducer()
     first = reducer.apply(OrderContext(), [Entity("cargo", "set", {"name": "苹果", "weight": "2吨"})])

@@ -49,6 +49,8 @@ def test_prompt_contains_normalization_rules():
     assert "上午" in p and "06:00-12:00" in p
     assert "小面" in p and "面包车" in p
     assert "surname" in p
+    assert "full_address" in p
+    assert "不得从上下文补全" in p
 
 
 def test_prompt_separates_vehicle_types_and_specs():
@@ -125,6 +127,80 @@ def test_extract_location_with_roles():
     assert len(entities) == 2
     assert entities[0].attributes["role"] == "pickup"
     assert entities[1].attributes["role"] == "dropoff"
+
+
+def test_extract_location_preserves_city_and_full_address():
+    payload = {"entities": [
+        {
+            "type": "location",
+            "action": "set",
+            "extraction_text": "上海浦东金桥物流园3号仓库",
+            "attributes": {
+                "role": "pickup",
+                "city": "上海",
+                "full_address": "上海浦东金桥物流园3号仓库",
+            },
+        },
+        {
+            "type": "location",
+            "action": "set",
+            "extraction_text": "温州瓯海批发市场",
+            "attributes": {
+                "role": "dropoff",
+                "city": "温州",
+                "full_address": "温州瓯海批发市场",
+            },
+        },
+    ]}
+    entities = extract_entities(
+        FakeLLMClient(json.dumps(payload, ensure_ascii=False)),
+        "从上海浦东金桥物流园3号仓库运到温州瓯海批发市场",
+        [],
+        "2026-08-14 10:00",
+    )
+    assert entities[0].attributes["city"] == "上海"
+    assert entities[0].attributes["full_address"] == "上海浦东金桥物流园3号仓库"
+    assert entities[1].attributes["full_address"] == "温州瓯海批发市场"
+
+
+def test_extract_location_without_city_keeps_explicit_full_address():
+    payload = {"entities": [{
+        "type": "location",
+        "action": "set",
+        "extraction_text": "浦东金桥物流园",
+        "attributes": {
+            "role": "pickup",
+            "full_address": "浦东金桥物流园",
+        },
+    }]}
+    entities = extract_entities(
+        FakeLLMClient(json.dumps(payload, ensure_ascii=False)),
+        "从浦东金桥物流园装货",
+        [],
+        "2026-08-14 10:00",
+    )
+    assert entities[0].attributes.get("city") is None
+    assert entities[0].attributes["full_address"] == "浦东金桥物流园"
+
+
+def test_extract_location_rejects_full_address_outside_source():
+    payload = {"entities": [{
+        "type": "location",
+        "action": "set",
+        "extraction_text": "上海",
+        "attributes": {
+            "role": "pickup",
+            "city": "上海",
+            "full_address": "上海浦东某仓库",
+        },
+    }]}
+    with pytest.raises(StructuredIntentError, match="full_address"):
+        extract_entities(
+            FakeLLMClient(json.dumps(payload, ensure_ascii=False)),
+            "从上海装货",
+            [],
+            "2026-08-14 10:00",
+        )
 
 
 def test_extract_vehicle_type_normalized_value():
