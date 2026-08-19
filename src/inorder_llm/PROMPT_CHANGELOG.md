@@ -156,3 +156,20 @@
   - `conda run -n agent python -m pytest -q` → 65 passed。
   - `tests/test_rewrite.py`：覆盖 RewriteResult 序列化、增量货物、上下文分区、消息角色、prompt 动作规则、非法 JSON/字段和澄清结果。
   - 当前尚无真实 LLM 评测集；rewrite 与实体提取联调待后续接入订单子图后补充。
+
+---
+
+### `CARGO_PROFILE_SYSTEM_PROMPT`（`cargo_profile/resolver.py`）
+
+#### 2026-08-19T15:36:52+0800
+
+- **变更摘要**:
+  - 新增完整货物快照的约束画像 prompt，输出数量、重量、尺寸、装车占用体积、可堆叠性、易碎性、温度要求及汇总。
+  - 强制每个字段标注 `basis`、`confidence`，并要求记录估算假设与不确定性警告。
+  - 明确画像不得选择车型、输出车辆 code 或装箱坐标；原始 cargo 表达必须通过 `raw` 字段保留。
+- **原因**: 为后续车辆边界校验提供可解释的派生货物约束，同时保持原始货物事实不被覆盖。
+- **关联**: OpenSpec change `add-cargo-profile`。
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q tests/test_cargo_profile.py tests/test_context.py tests/test_order_processing_graph.py tests/test_intent_cli.py` → 49 passed。
+  - 断言位于 `tests/test_cargo_profile.py`，覆盖 prompt 规则、严格 JSON、原始表达保留、未知/partial 汇总、枚举及禁止车辆字段。
+  - 尚无真实 LLM 评测集，待补充。

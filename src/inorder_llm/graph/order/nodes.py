@@ -4,7 +4,7 @@ from typing import Any, Dict, Literal
 
 from ...graph.base import BaseNode
 from ...context import OrderContextReducer
-from .protocols import EntityExtractorModel, RewriteModel
+from .protocols import CargoProfileModel, EntityExtractorModel, RewriteModel
 from .state import OrderGraphState
 
 
@@ -69,6 +69,26 @@ class ContextUpdateNode(BaseNode[OrderGraphState]):
         return {
             "order_context": updated,
             "order_context_updated": updated != original,
+            "cargo_updated": updated.cargo != original.cargo,
+        }
+
+
+class CargoProfileNode(BaseNode[OrderGraphState]):
+    """Regenerate derived profiles only after raw cargo has changed."""
+
+    name = "cargo_profile"
+
+    def __init__(self, model: CargoProfileModel):
+        self.model = model
+
+    def run(self, state: OrderGraphState) -> Dict[str, Any]:
+        from ...cargo_profile.updater import regenerate_cargo_profile
+
+        original = state["order_context"]
+        updated = regenerate_cargo_profile(original, self.model)
+        return {
+            "order_context": updated,
+            "cargo_profile_updated": updated != original,
         }
 
 
@@ -85,6 +105,7 @@ class FinalizeNode(BaseNode[OrderGraphState]):
             "clarification_reason": state.get("clarification_reason"),
             "order_context": state.get("order_context"),
             "order_context_updated": state.get("order_context_updated", False),
+            "cargo_profile_updated": state.get("cargo_profile_updated", False),
         }
 
 
@@ -93,6 +114,7 @@ __all__ = [
     "ExtractNode",
     "ClarificationNode",
     "ContextUpdateNode",
+    "CargoProfileNode",
     "FinalizeNode",
     "route_rewrite",
 ]

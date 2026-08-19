@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 
 from inorder_llm.context import ContextReductionError, OrderContextReducer
+from inorder_llm.cargo_profile import parse_cargo_profile_from_text
 from inorder_llm.context.models import HistoryConversation, OrderContext
 from inorder_llm.extract.models import Entity
 from inorder_llm.graph.order import build_order_processing_graph
@@ -31,6 +32,36 @@ class FakeExtractor:
         if self.error:
             raise self.error
         return self.entities
+
+
+class FakeCargoProfile:
+    def __init__(self, result=None, error=None):
+        self.result = result
+        self.error = error
+        self.calls = []
+
+    def profile(self, cargo):
+        self.calls.append(deepcopy(cargo))
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def _cargo_profile_result(name="香蕉"):
+    return parse_cargo_profile_from_text(__import__("json").dumps({
+        "cargo_profiles": [{
+            "name": name,
+            "quantity": {"value": None, "unit": "unknown", "raw": [], "basis": "unknown", "confidence": "unknown"},
+            "weight": {"total_kg": 1000, "per_unit_kg": None, "raw": ["1吨"], "basis": "explicit", "confidence": "high"},
+            "dimensions": {"length_cm": None, "width_cm": None, "height_cm": None, "scope": "unknown", "shape": "unknown", "raw": [], "basis": "unknown", "confidence": "unknown"},
+            "volume": {"unit_m3": None, "total_m3": 1.8, "raw": [], "basis": "estimated", "confidence": "medium"},
+            "stackability": {"value": "partial", "basis": "estimated", "confidence": "medium", "reason": "包装未明确"},
+            "fragility": {"value": "low", "basis": "estimated", "confidence": "medium", "reason": "常见货物"},
+            "temperature": {"requirement": "ambient", "basis": "estimated", "confidence": "medium", "reason": "未提及温控"},
+            "assumptions": ["按常见包装估算"], "warnings": [],
+        }],
+        "cargo_profile_summary": {"total_weight_kg": 1000, "total_volume_m3": 1.8, "weight_status": "explicit", "volume_status": "estimated", "confidence": "medium", "warnings": []},
+    }, ensure_ascii=False))
 
 
 def _state(history=None, context=None):
@@ -147,6 +178,42 @@ def test_graph_applies_entities_to_new_order_context_without_mutating_input():
     ]
     assert result["order_context_updated"] is True
     assert original.cargo == [{"name": "苹果", "weight": "1吨"}]
+
+
+def test_graph_rebuilds_profile_after_raw_cargo_change_and_keeps_input_pure():
+    original = OrderContext()
+    rewrite = FakeRewriteModel(RewriteResult("新增一吨香蕉", "新增一吨香蕉"))
+    extractor = FakeExtractor([Entity("cargo", "set", {"name": "香蕉", "weight": "1吨"}, "一吨香蕉")])
+    profile = FakeCargoProfile(_cargo_profile_result())
+
+    result = build_order_processing_graph(rewrite, extractor, profile).invoke(_state(context=original))
+
+    assert profile.calls == [[{"name": "香蕉", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}]]
+    assert result["order_context"].cargo_profiles[0]["name"] == "香蕉"
+    assert result["cargo_profile_updated"] is True
+    assert original.cargo == []
+
+
+def test_graph_skips_profile_when_context_update_does_not_change_cargo():
+    rewrite = FakeRewriteModel(RewriteResult("设置起运地上海", "设置起运地上海"))
+    extractor = FakeExtractor([Entity("location", "set", {"role": "pickup", "city": "上海"}, "上海")])
+    profile = FakeCargoProfile(_cargo_profile_result())
+
+    result = build_order_processing_graph(rewrite, extractor, profile).invoke(_state())
+
+    assert profile.calls == []
+    assert result["cargo_profile_updated"] is False
+
+
+def test_profile_error_keeps_original_raw_context_unmodified():
+    original = OrderContext(cargo=[{"name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}])
+    rewrite = FakeRewriteModel(RewriteResult("再加一吨香蕉", "再加一吨香蕉"))
+    extractor = FakeExtractor([Entity("cargo", "add", {"name": "香蕉", "weight": "1吨"}, "一吨香蕉")])
+    profile = FakeCargoProfile(error=StructuredIntentError("invalid profile"))
+
+    with pytest.raises(StructuredIntentError, match="invalid profile"):
+        build_order_processing_graph(rewrite, extractor, profile).invoke(_state(context=original))
+    assert original.cargo == [{"name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}]
 
 
 def test_graph_repeated_cargo_additions_preserve_raw_expressions():

@@ -110,6 +110,8 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
             lines.append("Extract：" + ("已执行" if result.get("extract_executed") else "未执行"))
         lines.append("实体数量：" + str(result.get("entity_count", len(result.get("entities", [])))))
         lines.append("订单上下文：" + ("已更新" if result.get("order_context_updated") else "未更新"))
+        if result.get("cargo_profile_updated"):
+            lines.append("货物画像：已重建")
         for entity in result.get("entities", []):
             item = _data(entity)
             lines.append("Entity：" + json.dumps(item, ensure_ascii=False))

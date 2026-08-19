@@ -75,6 +75,10 @@ class OrderContext:
     sender_phone: Optional[str] = None
     receiver_phone: Optional[str] = None
     cargo: List[Dict[str, Any]] = field(default_factory=list)
+    # Derived from the complete raw cargo snapshot. These fields intentionally
+    # remain separate from ``cargo`` so raw user expressions are never lost.
+    cargo_profiles: List[Dict[str, Any]] = field(default_factory=list)
+    cargo_profile_summary: Optional[Dict[str, Any]] = None
     vehicle_type: Optional[str] = None
     vehicle_specs: List[str] = field(default_factory=list)
     delivery_time: Optional[Mapping[str, Any]] = None

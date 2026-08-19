@@ -1,10 +1,11 @@
 """Minimal injectable protocols used by the order-processing graph."""
 
-from typing import List, Protocol
+from typing import List, Protocol, Sequence, Mapping, Any
 
 from ...context.models import HistoryConversation, OrderContext
 from ...extract.models import Entity
 from ...rewrite.models import RewriteResult
+from ...cargo_profile.models import CargoProfileResult
 
 
 class RewriteModel(Protocol):
@@ -26,4 +27,9 @@ class EntityExtractorModel(Protocol):
         ...
 
 
-__all__ = ["RewriteModel", "EntityExtractorModel"]
+class CargoProfileModel(Protocol):
+    def profile(self, cargo: Sequence[Mapping[str, Any]]) -> CargoProfileResult:
+        ...
+
+
+__all__ = ["RewriteModel", "EntityExtractorModel", "CargoProfileModel"]

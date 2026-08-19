@@ -13,6 +13,8 @@ class OrderGraphState(TypedDict, total=False):
     history: HistoryConversation
     order_context: OrderContext
     order_context_updated: bool
+    cargo_updated: bool
+    cargo_profile_updated: bool
     rewrite_result: RewriteResult
     entities: List[Entity]
     needs_clarification: bool

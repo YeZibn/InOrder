@@ -3,6 +3,7 @@
 from .graph import OrderProcessingGraph, build_order_processing_graph
 from .nodes import (
     ClarificationNode,
+    CargoProfileNode,
     ContextUpdateNode,
     ExtractNode,
     FinalizeNode,
@@ -19,6 +20,7 @@ __all__ = [
     "ExtractNode",
     "ClarificationNode",
     "ContextUpdateNode",
+    "CargoProfileNode",
     "FinalizeNode",
     "route_rewrite",
 ]

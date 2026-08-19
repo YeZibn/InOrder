@@ -207,7 +207,11 @@ def test_failed_graph_does_not_append_assistant_summary():
 def test_context_and_conversation_commands_are_read_only_json():
     cli = IntentCli(graph=FakeGraph())
     cli.session.history.append_user("历史输入")
-    cli.session.order_context = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
+    cli.session.order_context = OrderContext(
+        cargo=[{"name": "苹果", "weight": "1吨"}],
+        cargo_profiles=[{"name": "苹果", "weight": {"total_kg": 1000}}],
+        cargo_profile_summary={"total_weight_kg": 1000},
+    )
     before = cli.session.to_dict() if hasattr(cli.session, "to_dict") else {
         "history": cli.session.history.to_dict(),
         "order_context": cli.session.order_context.to_dict(),
@@ -215,6 +219,8 @@ def test_context_and_conversation_commands_are_read_only_json():
     context = cli.handle_command("context")
     conversation = cli.handle_command("conversation")
     assert json.loads(context)["cargo"] == [{"name": "苹果", "weight": "1吨"}]
+    assert json.loads(context)["cargo_profiles"][0]["name"] == "苹果"
+    assert json.loads(context)["cargo_profile_summary"]["total_weight_kg"] == 1000
     assert json.loads(conversation)["turns"][0]["content"] == "历史输入"
     assert cli.session.history.to_dict() == before["history"]
     assert cli.session.order_context.to_dict() == before["order_context"]

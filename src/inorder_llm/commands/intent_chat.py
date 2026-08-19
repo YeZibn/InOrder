@@ -4,6 +4,7 @@ from ..graph.order import build_order_processing_graph
 from ..intent.resolver import LLMIntentModel
 from ..rewrite import OrderRewriteModel
 from ..extract import EntityExtractor, LangExtractEntityExtractor
+from ..cargo_profile import CargoProfileResolver
 from ..cli.app import IntentCli
 
 
@@ -16,7 +17,7 @@ def main(argv=None):
         if config.extractor_backend == "langextract"
         else EntityExtractor(client)
     )
-    order_graph = build_order_processing_graph(OrderRewriteModel(client), extractor)
+    order_graph = build_order_processing_graph(OrderRewriteModel(client), extractor, CargoProfileResolver(client))
     IntentCli(intent_graph=intent_graph, order_graph=order_graph).run()
     return 0
 

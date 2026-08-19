@@ -18,6 +18,20 @@ def test_empty_order_context_is_json_compatible():
     assert data["pickup_location"] is None
     assert data["cargo"] == []
     assert data["vehicle_specs"] == []
+    assert data["cargo_profiles"] == []
+    assert data["cargo_profile_summary"] is None
+
+
+def test_order_context_serializes_derived_profiles_without_changing_raw_cargo():
+    context = OrderContext(
+        cargo=[{"name": "香蕉", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}],
+        cargo_profiles=[{"name": "香蕉", "weight": {"total_kg": 1000, "basis": "explicit"}}],
+        cargo_profile_summary={"total_weight_kg": 1000, "weight_status": "explicit"},
+    )
+    data = context.to_dict()
+    assert data["cargo"] == context.cargo
+    assert data["cargo_profiles"] == context.cargo_profiles
+    assert data["cargo_profile_summary"] == context.cargo_profile_summary
 
 
 def test_reducer_scalar_replace_and_remove_is_pure():
