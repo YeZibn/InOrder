@@ -24,6 +24,11 @@ def build_langextract_order_examples():
             Extraction("location", "上海", attributes={"action": "set", "role": "pickup", "city": "上海"}),
             Extraction("location", "温州", attributes={"action": "set", "role": "dropoff", "city": "温州"}),
         ]),
+        ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】设置一吨苹果，起运地温州，目的地上海。", [
+            Extraction("cargo", "一吨苹果", attributes={"action": "set", "name": "苹果", "weight": "1吨", "quantity": None, "volume": None, "dimensions": None}),
+            Extraction("location", "温州", attributes={"action": "set", "role": "pickup", "city": "温州"}),
+            Extraction("location", "上海", attributes={"action": "set", "role": "dropoff", "city": "上海"}),
+        ]),
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】再加一吨苹果，4米2冷链厢式车", [
             Extraction("cargo", "一吨苹果", attributes={"action": "add", "name": "苹果", "weight": "1吨", "quantity": None, "volume": None, "dimensions": None}),
             Extraction("vehicle_type", "4米2", attributes={"action": "set", "value": "truck_4m2"}),

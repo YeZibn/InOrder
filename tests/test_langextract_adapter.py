@@ -68,7 +68,13 @@ def test_reducer_prefers_mapped_action_attribute():
         OrderContext(),
         [Entity("cargo", "add", {"name": "苹果", "weight": "1吨", "action": "set"}, "一吨苹果")],
     )
-    assert updated.cargo == [{"name": "苹果", "weight": "1吨"}]
+    assert updated.cargo == [{
+        "name": "苹果",
+        "weight": ["1吨"],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }]
 
 
 def test_extract_backend_defaults_to_langextract_and_validates_values():
@@ -84,9 +90,14 @@ def test_extract_backend_defaults_to_langextract_and_validates_values():
 
 
 def test_langextract_examples_cover_all_entity_classes_and_source_boundary():
+    from langextract.core.tokenizer import UnicodeTokenizer
+    from langextract.prompt_validation import validate_prompt_alignment
     from langextract.providers.schemas.openai import OpenAISchema
 
-    schema = OpenAISchema.from_examples(build_langextract_order_examples()).schema_dict
+    examples = build_langextract_order_examples()
+    assert validate_prompt_alignment(examples, tokenizer=UnicodeTokenizer()).issues == []
+
+    schema = OpenAISchema.from_examples(examples).schema_dict
     variants = schema["properties"]["extractions"]["items"]["anyOf"]
     classes = {next(iter(item["properties"])) for item in variants}
     assert classes == {
@@ -95,6 +106,22 @@ def test_langextract_examples_cover_all_entity_classes_and_source_boundary():
         "payment_type", "service_type", "remark", "order_id",
     }
     assert "【待提取文本】一吨苹果" in format_langextract_source("一吨苹果", "2026-08-17 10:00")
+
+
+def test_langextract_examples_align_chinese_entity_spans():
+    from langextract.core.tokenizer import UnicodeTokenizer
+    from langextract.prompt_validation import validate_prompt_alignment
+
+    examples = build_langextract_order_examples()
+    validation = validate_prompt_alignment(examples, tokenizer=UnicodeTokenizer())
+    assert validation.issues == []
+
+    rewrite_example = examples[1]
+    assert [(item.extraction_text, item.extraction_class) for item in rewrite_example.extractions] == [
+        ("一吨苹果", "cargo"),
+        ("温州", "location"),
+        ("上海", "location"),
+    ]
 
 
 @pytest.mark.parametrize("text", ["苹果改成香蕉", "4米2冷链厢式车", "明天上午王强收货13800138000", "到付不开票快车", "苹果容易碎轻拿轻放", "你好"])

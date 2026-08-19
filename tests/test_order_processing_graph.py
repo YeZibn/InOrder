@@ -130,11 +130,48 @@ def test_graph_applies_entities_to_new_order_context_without_mutating_input():
     result = build_order_processing_graph(rewrite, extractor).invoke(_state(context=original))
 
     assert result["order_context"].cargo == [
-        {"name": "苹果", "weight": "1吨"},
-        {"name": "香蕉", "weight": "1吨"},
+        {
+            "name": "苹果",
+            "weight": ["1吨"],
+            "quantity": [],
+            "volume": [],
+            "dimensions": [],
+        },
+        {
+            "name": "香蕉",
+            "weight": ["1吨"],
+            "quantity": [],
+            "volume": [],
+            "dimensions": [],
+        },
     ]
     assert result["order_context_updated"] is True
     assert original.cargo == [{"name": "苹果", "weight": "1吨"}]
+
+
+def test_graph_repeated_cargo_additions_preserve_raw_expressions():
+    rewrite = FakeRewriteModel(RewriteResult("本轮新增货物", "本轮新增货物"))
+    extractor = FakeExtractor([
+        Entity("cargo", "add", {"name": "香蕉", "weight": "500公斤"}, "500公斤香蕉")
+    ])
+    graph = build_order_processing_graph(rewrite, extractor)
+
+    first = graph.invoke(_state(context=OrderContext(cargo=[{
+        "name": "香蕉",
+        "weight": ["1吨"],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }])))
+    second = graph.invoke(_state(context=first["order_context"]))
+
+    assert second["order_context"].cargo == [{
+        "name": "香蕉",
+        "weight": ["1吨", "500公斤", "500公斤"],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }]
 
 
 def test_graph_supports_set_replace_and_remove_context_actions():

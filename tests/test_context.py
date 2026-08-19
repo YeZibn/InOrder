@@ -34,9 +34,103 @@ def test_reducer_cargo_add_and_remove():
     reducer = OrderContextReducer()
     first = reducer.apply(OrderContext(), [Entity("cargo", "set", {"name": "苹果", "weight": "2吨"})])
     second = reducer.apply(first, [Entity("cargo", "add", {"name": "苹果", "weight": "1吨"})])
-    assert second.cargo[0]["weight"] == "3吨"
+    assert second.cargo == [{
+        "name": "苹果",
+        "weight": ["2吨", "1吨"],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }]
     removed = reducer.apply(second, [Entity("cargo", "remove", {"name": "苹果"})])
     assert removed.cargo == []
+
+
+def test_reducer_cargo_replace_replaces_raw_lists():
+    reducer = OrderContextReducer()
+    context = reducer.apply(
+        OrderContext(),
+        [Entity("cargo", "set", {
+            "name": "香蕉",
+            "weight": "1吨",
+            "quantity": "20箱",
+            "volume": "5立方",
+            "dimensions": "2米×1米×1米",
+        })],
+    )
+    replaced = reducer.apply(
+        context,
+        [Entity("cargo", "replace", {"name": "香蕉", "weight": "500公斤"})],
+    )
+    assert replaced.cargo == [{
+        "name": "香蕉",
+        "weight": ["500公斤"],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }]
+
+
+def test_reducer_cargo_ignores_null_and_empty_attributes():
+    reducer = OrderContextReducer()
+    context = reducer.apply(
+        OrderContext(),
+        [Entity("cargo", "set", {
+            "name": "苹果",
+            "weight": None,
+            "quantity": "",
+            "volume": [],
+            "dimensions": " ",
+        })],
+    )
+    assert context.cargo == [{
+        "name": "苹果",
+        "weight": [],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }]
+
+
+def test_reducer_cargo_migrates_legacy_scalar_record_on_cargo_action():
+    legacy = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
+    updated = OrderContextReducer().apply(
+        legacy,
+        [Entity("cargo", "add", {"name": "香蕉", "weight": "500公斤"})],
+    )
+    assert updated.cargo == [
+        {
+            "name": "苹果",
+            "weight": ["1吨"],
+            "quantity": [],
+            "volume": [],
+            "dimensions": [],
+        },
+        {
+            "name": "香蕉",
+            "weight": ["500公斤"],
+            "quantity": [],
+            "volume": [],
+            "dimensions": [],
+        },
+    ]
+    assert legacy.cargo == [{"name": "苹果", "weight": "1吨"}]
+
+
+def test_raw_cargo_context_serializes_as_json_compatible_lists():
+    context = OrderContext(cargo=[{
+        "name": "香蕉",
+        "weight": ["1吨", "500公斤"],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }])
+    assert context.to_dict()["cargo"] == [{
+        "name": "香蕉",
+        "weight": ["1吨", "500公斤"],
+        "quantity": [],
+        "volume": [],
+        "dimensions": [],
+    }]
 
 
 def test_reducer_list_and_remark_actions():

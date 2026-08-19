@@ -2,7 +2,7 @@
 
 ## Purpose
 
-为多轮订单识别提供会话历史、当前订单草稿状态和可测试的实体 action 合并能力。
+为多轮订单识别提供可持久化的会话历史、当前订单草稿状态和可测试的实体 action 合并能力，并支持解析结果在后续订单流程中稳定复用。
 ## Requirements
 ### Requirement: Conversation history
 
@@ -47,15 +47,19 @@
 
 ### Requirement: Entity action reduction
 
-系统 SHALL 将订单实体的 `set`、`add`、`remove` 和 `replace` action 应用到订单上下文，并返回更新后的上下文。
+系统 SHALL 将订单实体的 `set`、`add`、`remove` 和 `replace` action 应用到订单上下文，并返回更新后的上下文。对于货物实体，系统 SHALL 按 `name` 聚合同类货物，并将 `weight`、`quantity`、`volume` 和 `dimensions` 保存为原始值列表；当前阶段不得进行单位换算或数值相加。
 
 #### Scenario: Set and replace scalar field
 - **WHEN** 对 pickup_location 执行 set，再对其执行 replace
 - **THEN** 上下文只保留 replace 后的地址
 
-#### Scenario: Add cargo increment
-- **WHEN** 上下文已有某货物数量，应用同货物的 add entity
-- **THEN** 系统累加数量或重量，不覆盖已有货物
+#### Scenario: Add raw cargo increment
+- **WHEN** 上下文已有某货物原始属性，应用同货物的 add entity
+- **THEN** 本轮非空货物属性追加到对应列表，不覆盖旧值，也不进行数值合并
+
+#### Scenario: Ignore null cargo attributes during add
+- **WHEN** add entity 的某些货物属性为 null
+- **THEN** null 属性被忽略，不能触发错误或写入 null 列表项
 
 #### Scenario: Remove cargo
 - **WHEN** 对已有货物应用 remove entity
@@ -73,4 +77,3 @@
 
 - **WHEN** 对订单实体列表执行合并
 - **THEN** 系统只返回上下文数据，不触发外部订单或数据库调用
-

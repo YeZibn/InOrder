@@ -58,6 +58,8 @@ class LangExtractEntityExtractor:
             return self.backend(text)
         try:
             import langextract as lx
+            from langextract.core.tokenizer import UnicodeTokenizer
+            from langextract.prompt_validation import PromptValidationLevel
         except ImportError as exc:
             raise StructuredIntentError("langextract is not installed") from exc
         return lx.extract(
@@ -69,6 +71,8 @@ class LangExtractEntityExtractor:
             model_url=self.config.base_url,
             language_model_params={"reasoning_effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
             extraction_passes=1,
+            tokenizer=UnicodeTokenizer(),
+            prompt_validation_level=PromptValidationLevel.ERROR,
         )
 
     def extract(self, message: str, history_or_reference, reference_time: str = None) -> List[Entity]:

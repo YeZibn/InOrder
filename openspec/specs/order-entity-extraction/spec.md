@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD: Define the order entity extraction capability and its observable output contract.
+从当前订单解析文本中提取可回溯到原文的结构化实体，为澄清、上下文合并和后续订单处理提供稳定输入，同时明确模型语义决策、字段契约与空结果行为。
 ## Requirements
 ### Requirement: Grounded prompt contract
 
@@ -165,12 +165,21 @@ extract 函数 SHALL 接受三个显式输入参数：`message`（用户本次�
 
 ### Requirement: Structured extraction output
 
-系统 SHALL 将 LLM 返回的结构化结果解析为实体列表。输出中每个实体包含 `type`（实体类型）、`action`（add/set/remove/replace）、`attributes`（类型特定属性字典）、`extraction_text`（原文短语，remark 用概括短语）。解析失败时 SHALL 抛出 `StructuredIntentError`（复用现有错误处理约定）。
+系统 SHALL 将提取后结果转换为统一实体列表。每个实体包含 `extraction_class`、`extraction_text`、`attributes` 和可选 metadata；系统仅可对缺失必填字段、非法 action 枚举或无法读取 grounded 数据等输出契约问题抛出 `StructuredIntentError` 或明确的提取错误，不得因业务语义自行推断或修复输出。
 
-#### Scenario: Valid JSON parsed to entities
-- **WHEN** LLM 返回合法的 JSON 结构化输出
-- **THEN** 系统解析为 Entity 列表，每个实体含 type、action、attributes、extraction_text
+#### Scenario: Valid grounded extraction mapped
+- **WHEN** 后端返回可定位的提取结果
+- **THEN** 系统将其映射为统一实体，并保留原文片段、attributes 和元数据
 
-#### Scenario: Invalid JSON raises error
-- **WHEN** LLM 返回无法解析的 JSON
-- **THEN** 系统抛出 StructuredIntentError，包含原始输出和解析错误信息
+#### Scenario: Empty extraction is preserved
+- **WHEN** 后端返回空提取，无论输入文本看起来是否包含订单信息
+- **THEN** 系统 SHALL 返回空实体列表，不得以关键词、正则或其他本地规则将其转换为提取失败或澄清
+
+### Requirement: Extraction backend boundary
+
+系统 SHALL 通过可注入的提取器接口隔离 LangExtract 后端，允许测试替身和后续后端替换；LangGraph 订单节点只依赖该接口，不依赖具体 LangExtract API。
+
+#### Scenario: Injectable extraction backend
+
+- **WHEN** 测试或运行时注入一个实现提取接口的后端
+- **THEN** 订单图可以使用该后端完成提取而无需修改图节点

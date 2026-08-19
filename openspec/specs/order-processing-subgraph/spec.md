@@ -55,12 +55,12 @@
 
 ### Requirement: Keep parsing-only boundary
 
-订单处理子图 SHALL 只负责 rewrite、澄清路由、实体提取和内存订单上下文更新；不得调用历史订单服务、订单创建或确认工具，不得写入数据库。
+订单处理子图 SHALL 只负责 rewrite、澄清路由、grounded 实体提取和内存订单上下文更新；不得调用历史订单服务、订单创建或确认工具，不得写入数据库。对于提取结果中的业务 attributes，子图 SHALL 原样应用 LLM 已作出的 action 和字段决策，不得自行补全或重判。
 
-#### Scenario: Parsing applies entities in memory only
+#### Scenario: Parsing applies mapped grounded entities in memory only
 
 - **WHEN** 子图提取出带 action 的订单实体
-- **THEN** 子图将实体应用到当前 `OrderContext` 并返回新上下文，不触发外部业务副作用
+- **THEN** 子图将实体的 LLM 决策 attributes 原样应用到当前 `OrderContext` 并返回新上下文，不触发外部业务副作用
 
 #### Scenario: Clarification does not update context
 

@@ -1,8 +1,7 @@
 """Apply extracted entity actions to an active order context."""
 
 from copy import deepcopy
-import re
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping
 
 from ..extract.models import Entity
 from ..normalization import normalize_entities
@@ -22,6 +21,7 @@ _SCALAR_TYPES = {
     "service_type": "service_type",
     "order_id": "referenced_order_id",
 }
+_CARGO_RAW_FIELDS = ("weight", "quantity", "volume", "dimensions")
 
 
 def _value(entity: Entity) -> Any:
@@ -40,27 +40,34 @@ def _business_attributes(entity: Entity) -> Dict[str, Any]:
     return {key: value for key, value in entity.attributes.items() if key != "action"}
 
 
-def _number(value: Any) -> Optional[float]:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
-    if not isinstance(value, str):
-        return None
-    match = re.search(r"[-+]?\d+(?:\.\d+)?", value)
-    return float(match.group()) if match else None
+def _raw_values(value: Any) -> list[Any]:
+    """Convert an extracted raw attribute into non-empty list entries."""
+
+    if value is None:
+        return []
+    values = value if isinstance(value, (list, tuple)) else [value]
+    result = []
+    for item in values:
+        if item is None:
+            continue
+        if isinstance(item, str) and not item.strip():
+            continue
+        result.append(item)
+    return result
 
 
-def _add_measure(old: Any, new: Any) -> Any:
-    old_num, new_num = _number(old), _number(new)
-    if old_num is None or new_num is None:
-        raise ContextReductionError("cannot safely add non-numeric cargo measure")
-    total = old_num + new_num
-    if isinstance(old, int) and isinstance(new, int):
-        return int(total)
-    if isinstance(old, str):
-        match = re.search(r"[-+]?\d+(?:\.\d+)?\s*(.*)$", old)
-        suffix = match.group(1) if match else ""
-        return (str(int(total)) if total.is_integer() else str(total)) + suffix
-    return int(total) if total.is_integer() else total
+def _cargo_record(name: Any, attrs: Mapping[str, Any]) -> Dict[str, Any]:
+    """Build the canonical raw cargo shape from one entity or legacy record."""
+
+    record: Dict[str, Any] = {"name": name}
+    for key, value in attrs.items():
+        if key in ("name", *_CARGO_RAW_FIELDS):
+            continue
+        if value is not None:
+            record[key] = value
+    for field_name in _CARGO_RAW_FIELDS:
+        record[field_name] = _raw_values(attrs.get(field_name))
+    return record
 
 
 class OrderContextReducer:
@@ -124,24 +131,28 @@ class OrderContextReducer:
             raise ContextReductionError("add is not supported for scalar field: " + field_name)
 
     def _cargo(self, context, entity: Entity):
+        context.cargo = [
+            _cargo_record(item.get("name"), item)
+            for item in context.cargo
+        ]
         attrs = _business_attributes(entity)
         name = attrs.get("name") or entity.extraction_text
         index = next((i for i, item in enumerate(context.cargo) if item.get("name") == name), None)
         action = _action(entity)
         if action in ("set", "replace"):
-            item = attrs or {"name": name}
-            item.setdefault("name", name)
+            item = _cargo_record(name, attrs)
             if index is None: context.cargo.append(item)
             else: context.cargo[index] = item
         elif action == "remove":
             context.cargo = [item for item in context.cargo if item.get("name") != name]
         elif action == "add":
             if index is None:
-                context.cargo.append(attrs or {"name": name})
+                context.cargo.append(_cargo_record(name, attrs))
             else:
-                current = context.cargo[index]
-                for key, value in attrs.items():
-                    current[key] = _add_measure(current[key], value) if key in ("weight", "quantity", "volume") and key in current else value
+                current = _cargo_record(name, context.cargo[index])
+                for field_name in _CARGO_RAW_FIELDS:
+                    current[field_name].extend(_raw_values(attrs.get(field_name)))
+                context.cargo[index] = current
 
     def _list(self, context, field_name: str, value: Any, entity: Entity):
         values = value if isinstance(value, list) else [value]
