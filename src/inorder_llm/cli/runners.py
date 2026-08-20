@@ -40,15 +40,11 @@ class OrderChainRunner:
         )
         result = dict(raw_result)
         rewrite_result = result.get("rewrite_result")
-        needs_clarification = bool(result.get("needs_clarification"))
         result.update(
             {
                 "order_graph_entered": True,
                 "rewrite_completed": rewrite_result is not None,
-                "extract_executed": not needs_clarification,
-                "extract_skipped_reason": (
-                    result.get("clarification_reason") if needs_clarification else None
-                ),
+                "extract_executed": True,
                 "entity_count": len(result.get("entities", ())),
                 "order_context_updated": bool(result.get("order_context_updated")),
                 "cargo_profile_updated": bool(result.get("cargo_profile_updated")),

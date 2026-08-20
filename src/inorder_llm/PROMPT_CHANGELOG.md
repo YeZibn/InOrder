@@ -168,6 +168,20 @@
 
 ### `REWRITE_SYSTEM_PROMPT`（`rewrite/resolver.py`）
 
+#### 2026-08-20T14:55:09+0800
+
+- **变更摘要**:
+  - 移除 rewrite 输出中的 `needs_clarification` 和 `clarification_reason`。
+  - 要求存在歧义时根据当前订单上下文和最近对话选择最合理解释，继续生成可执行的 `extraction_text`。
+- **原因**: rewrite 澄清会直接跳过 extract，阻断订单语义链路；当前阶段改为最佳努力解析。
+- **关联**: OpenSpec change `remove-rewrite-clarification`
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q` → 172 passed, 2 skipped。
+  - `tests/test_rewrite.py` 和 `tests/test_order_processing_graph.py` 覆盖无澄清字段、歧义仍进入 extract 及非法 JSON 校验。
+  - 尚无真实 LLM 评测集，待补充。
+
+---
+
 #### 2026-08-15
 
 - **变更摘要**:

@@ -20,13 +20,7 @@ class RewriteNode(BaseNode[OrderGraphState]):
         )
         return {
             "rewrite_result": result,
-            "needs_clarification": result.needs_clarification,
-            "clarification_reason": result.clarification_reason,
         }
-
-
-def route_rewrite(state: OrderGraphState) -> Literal["clarification", "extract"]:
-    return "clarification" if state.get("needs_clarification") else "extract"
 
 
 class ExtractNode(BaseNode[OrderGraphState]):
@@ -42,17 +36,6 @@ class ExtractNode(BaseNode[OrderGraphState]):
             state["reference_time"],
         )
         return {"entities": entities}
-
-
-class ClarificationNode(BaseNode[OrderGraphState]):
-    name = "clarification"
-
-    def run(self, state: OrderGraphState) -> Dict[str, Any]:
-        return {
-            "entities": [],
-            "order_context": state["order_context"],
-            "order_context_updated": False,
-        }
 
 
 class ContextUpdateNode(BaseNode[OrderGraphState]):
@@ -101,8 +84,6 @@ class FinalizeNode(BaseNode[OrderGraphState]):
         return {
             "rewrite_result": state.get("rewrite_result"),
             "entities": list(state.get("entities", [])),
-            "needs_clarification": state.get("needs_clarification", False),
-            "clarification_reason": state.get("clarification_reason"),
             "order_context": state.get("order_context"),
             "order_context_updated": state.get("order_context_updated", False),
             "cargo_profile_updated": state.get("cargo_profile_updated", False),
@@ -112,9 +93,7 @@ class FinalizeNode(BaseNode[OrderGraphState]):
 __all__ = [
     "RewriteNode",
     "ExtractNode",
-    "ClarificationNode",
     "ContextUpdateNode",
     "CargoProfileNode",
     "FinalizeNode",
-    "route_rewrite",
 ]

@@ -87,17 +87,9 @@ class FakeOrderGraph:
 
     def invoke(self, state):
         self.calls.append(state)
-        if self.clarification:
-            return {
-                "rewrite_result": RewriteResult("", "", True, "车型指代不唯一"),
-                "entities": [],
-                "needs_clarification": True,
-                "clarification_reason": "车型指代不唯一",
-            }
         return {
-            "rewrite_result": RewriteResult("本轮新增一吨苹果", "再加一吨苹果"),
+            "rewrite_result": RewriteResult("本轮选择最合理车型", "设置当前车型"),
             "entities": [],
-            "needs_clarification": False,
         }
 
 
@@ -142,21 +134,19 @@ def test_full_output_reports_extract_execution_and_entity_count():
     output = cli.handle_message("再加一吨苹果")
     assert "订单处理：已进入" in output
     assert "Rewrite：已完成" in output
-    assert "澄清：否" in output
     assert "Extract：已执行" in output
     assert "实体数量：0" in output
 
 
-def test_full_output_reports_clarification_and_extract_skip():
+def test_full_output_does_not_report_rewrite_clarification():
     intent = FakeIntentGraph("order")
     order = FakeOrderGraph(clarification=True)
     cli = IntentCli(intent_graph=intent, order_graph=order)
     output = cli.handle_message("换回之前那个车")
     assert "订单处理：已进入" in output
     assert "Rewrite：已完成" in output
-    assert "澄清：是" in output
-    assert "Extract：已跳过" in output
-    assert "车型指代不唯一" in output
+    assert "Extract：已执行" in output
+    assert "澄清" not in output
 
 
 def test_order_chain_persists_updated_context_between_messages():

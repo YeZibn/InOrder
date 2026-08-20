@@ -21,11 +21,11 @@ class FakeClient:
 
 def test_rewrite_result_serializes():
     result = RewriteResult("已有苹果，本轮新增香蕉", "新增一吨香蕉")
-    assert result.to_dict()["needs_clarification"] is False
+    assert result.to_dict() == {"rewritten_text": "已有苹果，本轮新增香蕉", "extraction_text": "新增一吨香蕉"}
 
 
 def test_rewrite_incremental_cargo_and_message_sections():
-    client = FakeClient({"rewritten_text": "当前已有一吨香蕉，本轮新增一吨苹果", "extraction_text": "新增一吨苹果", "needs_clarification": False, "clarification_reason": None})
+    client = FakeClient({"rewritten_text": "当前已有一吨香蕉，本轮新增一吨苹果", "extraction_text": "新增一吨苹果"})
     history = HistoryConversation()
     history.append_user("我要一吨香蕉")
     context = OrderContext(cargo=[{"name": "香蕉", "weight": "1吨"}])
@@ -43,14 +43,14 @@ def test_rewrite_prompt_contains_action_and_conservative_rules():
     assert "add" in REWRITE_SYSTEM_PROMPT
     assert "remove" in REWRITE_SYSTEM_PROMPT
     assert "replace" in REWRITE_SYSTEM_PROMPT
-    assert "不得猜测" in REWRITE_SYSTEM_PROMPT
+    assert "最合理的解释" in REWRITE_SYSTEM_PROMPT
     assert "extraction_text" in REWRITE_SYSTEM_PROMPT
 
 
 @pytest.mark.parametrize("payload", [
     {},
-    {"rewritten_text": "x", "extraction_text": "x", "needs_clarification": False, "clarification_reason": "unexpected"},
-    {"rewritten_text": "x", "extraction_text": "x", "needs_clarification": True, "clarification_reason": None},
+    {"rewritten_text": "x"},
+    {"rewritten_text": "x", "extraction_text": "x", "needs_clarification": False},
     {"rewritten_text": 1, "extraction_text": "x", "needs_clarification": False, "clarification_reason": None},
 ])
 def test_invalid_rewrite_output(payload):
@@ -58,7 +58,6 @@ def test_invalid_rewrite_output(payload):
         parse_rewrite_from_text(json.dumps(payload))
 
 
-def test_clarification_result_requires_reason():
-    result = parse_rewrite_from_text(json.dumps({"rewritten_text": "存在多个候选", "extraction_text": "", "needs_clarification": True, "clarification_reason": "无法确定车型"}))
-    assert result.needs_clarification is True
-    assert result.extraction_text == ""
+def test_best_effort_rewrite_has_no_clarification_fields():
+    result = parse_rewrite_from_text(json.dumps({"rewritten_text": "选择当前订单中的车辆", "extraction_text": "设置当前车辆"}))
+    assert result.to_dict() == {"rewritten_text": "选择当前订单中的车辆", "extraction_text": "设置当前车辆"}

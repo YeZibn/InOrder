@@ -3,8 +3,7 @@
 from langgraph.graph import END, START, StateGraph
 
 from ...graph.base import BaseGraph
-from .nodes import (CargoProfileNode, ClarificationNode, ContextUpdateNode,
-                    ExtractNode, FinalizeNode, RewriteNode, route_rewrite)
+from .nodes import CargoProfileNode, ContextUpdateNode, ExtractNode, FinalizeNode, RewriteNode
 from .protocols import CargoProfileModel, EntityExtractorModel, RewriteModel
 from .state import OrderGraphState
 
@@ -19,18 +18,12 @@ class OrderProcessingGraph(BaseGraph[OrderGraphState]):
         builder = StateGraph(OrderGraphState)
         builder.add_node("rewrite", RewriteNode(self.rewrite_model))
         builder.add_node("extract", ExtractNode(self.extractor))
-        builder.add_node("clarification", ClarificationNode())
         builder.add_node("update_context", ContextUpdateNode())
         if self.profile_model is not None:
             builder.add_node("cargo_profile", CargoProfileNode(self.profile_model))
         builder.add_node("finalize", FinalizeNode())
         builder.add_edge(START, "rewrite")
-        builder.add_conditional_edges(
-            "rewrite",
-            route_rewrite,
-            {"clarification": "clarification", "extract": "extract"},
-        )
-        builder.add_edge("clarification", "finalize")
+        builder.add_edge("rewrite", "extract")
         builder.add_edge("extract", "update_context")
         if self.profile_model is not None:
             builder.add_conditional_edges(

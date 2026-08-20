@@ -30,13 +30,13 @@
 - **WHEN** 当前上下文存在苹果，用户输入“苹果不要了”
 - **THEN** extraction_text 明确表达移除苹果
 
-### Requirement: Conservative ambiguity handling
+### Requirement: Best-effort ambiguity handling
 
-系统 SHALL 只使用当前订单上下文和历史中明确的信息解决省略或指代；无法唯一确定目标时不得猜测，并 SHALL 返回澄清标记和原因。
+系统 SHALL 只使用当前订单上下文和历史中明确的信息解决省略或指代；存在多个候选时 SHALL 选择最合理的解释，生成可执行的 extraction_text，不得以澄清状态阻断提取链路。
 
 #### Scenario: Ambiguous historical reference
 - **WHEN** 历史中存在多个车型候选，用户输入“换回之前那个车”
-- **THEN** 系统设置 needs_clarification 为 true，说明存在多个候选，并返回空或不可执行的 extraction_text
+- **THEN** 系统返回非空 rewritten_text 和 extraction_text，并继续进入实体提取
 
 #### Scenario: Missing context does not force clarification
 - **WHEN** 当前上下文为空，用户输入“再加一吨苹果”
@@ -44,11 +44,11 @@
 
 ### Requirement: Structured rewrite result
 
-系统 SHALL 返回包含 `rewritten_text`、`extraction_text`、`needs_clarification` 和 `clarification_reason` 的结构化结果，并在非澄清场景下将 clarification_reason 设为空。
+系统 SHALL 返回只包含 `rewritten_text` 和 `extraction_text` 的结构化结果；两个字段都必须是字符串。
 
 #### Scenario: Successful structured result
 - **WHEN** rewrite 成功且语义可确定
-- **THEN** 系统返回非空 rewritten_text 和 extraction_text，needs_clarification 为 false
+- **THEN** 系统返回非空 rewritten_text 和 extraction_text，不包含澄清字段
 
 #### Scenario: Invalid model output
 - **WHEN** LLM 返回非法 JSON、缺少必需字段或字段类型错误

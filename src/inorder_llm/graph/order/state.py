@@ -17,8 +17,6 @@ class OrderGraphState(TypedDict, total=False):
     cargo_profile_updated: bool
     rewrite_result: RewriteResult
     entities: List[Entity]
-    needs_clarification: bool
-    clarification_reason: Optional[str]
 
 
 __all__ = ["OrderGraphState"]

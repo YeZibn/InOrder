@@ -71,12 +71,6 @@ def _assistant_summary(result, chain: str, mode: Optional[str] = None):
             text += "；问答入口尚未实现"
         return text, {"chain": "full", "main_intent": intent}
     if chain == "order":
-        if result.get("needs_clarification"):
-            reason = result.get("clarification_reason") or "未提供原因"
-            return "需要澄清：" + str(reason) + "；Extract 未执行。", {
-                "chain": "order", "needs_clarification": True,
-                "order_context_updated": False,
-            }
         count = result.get("entity_count", len(result.get("entities", [])))
         updated = bool(result.get("order_context_updated"))
         return f"订单解析完成；Extract 提取 {count} 个实体；订单上下文" + ("已更新。" if updated else "未更新。"), {
@@ -101,13 +95,7 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
         lines.append("订单处理：" + ("已进入" if result.get("order_graph_entered") else "未进入"))
         lines.append("Rewrite：" + ("已完成" if result.get("rewrite_completed") else "未完成"))
         if rewrite: lines.append("Rewrite：" + str(rewrite.get("rewritten_text", "")))
-        if result.get("needs_clarification"):
-            lines.append("澄清：是")
-            lines.append("Extract：已跳过")
-            lines.append("原因：" + str(result.get("extract_skipped_reason") or result.get("clarification_reason") or "未提供原因"))
-        else:
-            lines.append("澄清：否")
-            lines.append("Extract：" + ("已执行" if result.get("extract_executed") else "未执行"))
+        lines.append("Extract：" + ("已执行" if result.get("extract_executed") else "未执行"))
         lines.append("实体数量：" + str(result.get("entity_count", len(result.get("entities", [])))))
         lines.append("订单上下文：" + ("已更新" if result.get("order_context_updated") else "未更新"))
         if result.get("cargo_profile_updated"):

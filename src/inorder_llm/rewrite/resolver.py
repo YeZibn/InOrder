@@ -24,19 +24,18 @@ REWRITE_SYSTEM_PROMPT = """你是物流订单语义重写器。
 - 用户表达增量操作时，extraction_text 只描述本轮新增或变更，不重复输出无关的已有字段。
 - 不要虚构用户没有表达的货物、地址、时间、联系人或车型。
 - 不要把历史订单自动合并到当前订单，除非用户明确引用历史信息。
-- 只能使用上下文中明确存在的信息解决省略或指代；无法唯一确定目标时不得猜测，应返回澄清标记和原因。
+- 只能使用上下文中明确存在的信息解决省略或指代；存在多个候选时选择基于当前订单上下文和最近对话最合理的解释，继续生成可执行文本，不得阻断提取链路。
 - 当前上下文为空时，“再加一吨苹果”应保守重写为“本轮新增一吨苹果”，不因为“再加”强制澄清。
 
 输出只能是 JSON 对象，不要输出 Markdown、解释或其他文字：
 {
   "rewritten_text": "完整但只描述本轮语义的重写文本",
   "extraction_text": "供实体提取器使用的本轮增量文本",
-  "needs_clarification": false,
-  "clarification_reason": null
+  "rewritten_text": "...",
+  "extraction_text": "..."
 }
 
-成功时 rewritten_text 和 extraction_text 必须是字符串，needs_clarification 必须为 false，clarification_reason 必须为 null。
-需要澄清时 needs_clarification 为 true，clarification_reason 必须说明原因；无法执行的 extraction_text 可为空字符串。
+成功时 rewritten_text 和 extraction_text 必须是字符串，且 extraction_text 必须可供实体提取器处理。
 """
 
 
@@ -63,22 +62,16 @@ def _build_user_message(message: str, history: HistoryConversation, order_contex
 
 
 def parse_rewrite(value: Mapping[str, Any]) -> RewriteResult:
-    required = ("rewritten_text", "extraction_text", "needs_clarification", "clarification_reason")
+    required = ("rewritten_text", "extraction_text")
     for field_name in required:
         if field_name not in value:
             raise StructuredIntentError("rewrite output missing field: " + field_name)
+    extra = set(value).difference(required)
+    if extra:
+        raise StructuredIntentError("rewrite output has unexpected field: " + sorted(extra)[0])
     if not isinstance(value["rewritten_text"], str) or not isinstance(value["extraction_text"], str):
         raise StructuredIntentError("rewrite text fields must be strings")
-    if not isinstance(value["needs_clarification"], bool):
-        raise StructuredIntentError("needs_clarification must be a boolean")
-    reason = value["clarification_reason"]
-    if reason is not None and not isinstance(reason, str):
-        raise StructuredIntentError("clarification_reason must be a string or null")
-    if value["needs_clarification"] and not reason:
-        raise StructuredIntentError("clarification_reason is required when clarification is needed")
-    if not value["needs_clarification"] and reason is not None:
-        raise StructuredIntentError("clarification_reason must be null when clarification is not needed")
-    return RewriteResult(value["rewritten_text"], value["extraction_text"], value["needs_clarification"], reason)
+    return RewriteResult(value["rewritten_text"], value["extraction_text"])
 
 
 def parse_rewrite_from_text(text: str) -> RewriteResult:

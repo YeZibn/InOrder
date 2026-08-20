@@ -88,25 +88,22 @@ def test_order_processing_graph_rewrites_then_extracts_incremental_text():
 
     assert result["rewrite_result"].extraction_text == "再加一吨苹果"
     assert result["entities"] == extractor.entities
-    assert result["needs_clarification"] is False
     assert len(rewrite.calls) == 1
     assert len(extractor.calls) == 1
     assert extractor.calls[0][0] == "再加一吨苹果"
     assert extractor.calls[0][1] == "2026-08-17 10:00"
 
 
-def test_clarification_route_skips_extractor_and_returns_empty_entities():
+def test_ambiguous_rewrite_still_calls_extractor():
     rewrite = FakeRewriteModel(
-        RewriteResult("", "", True, "历史中存在多个车型，无法确定目标")
+        RewriteResult("根据当前上下文选择最合理车型", "设置当前车型")
     )
     extractor = FakeExtractor([Entity("vehicle_type", "set", {}, "4米2")])
 
     result = build_order_processing_graph(rewrite, extractor).invoke(_state())
 
-    assert result["needs_clarification"] is True
-    assert result["clarification_reason"] == "历史中存在多个车型，无法确定目标"
-    assert result["entities"] == []
-    assert extractor.calls == []
+    assert result["entities"] == extractor.entities
+    assert extractor.calls[0][0] == "设置当前车型"
 
 
 def test_graph_preserves_history_and_order_context():
@@ -249,9 +246,9 @@ def test_graph_supports_set_replace_and_remove_context_actions():
     assert context.vehicle_specs == []
 
 
-def test_clarification_preserves_original_order_context():
+def test_best_effort_rewrite_preserves_original_order_context_when_no_entities():
     original = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
-    rewrite = FakeRewriteModel(RewriteResult("", "", True, "车型不明确"))
+    rewrite = FakeRewriteModel(RewriteResult("选择最合理车型", "设置车型"))
     result = build_order_processing_graph(rewrite, FakeExtractor()).invoke(_state(context=original))
     assert result["order_context"] == original
     assert result["order_context_updated"] is False

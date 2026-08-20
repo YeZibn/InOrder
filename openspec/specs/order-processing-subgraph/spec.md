@@ -2,13 +2,13 @@
 
 ## Purpose
 
-为订单输入提供一个独立、可测试且仅负责语义解析的 LangGraph 子图，将上下文重写、澄清分流和实体提取串联起来，为后续归一化与订单草稿更新提供稳定输入。
+为订单输入提供一个独立、可测试且仅负责语义解析的 LangGraph 子图，将上下文重写、实体提取和订单草稿更新串联起来，为后续归一化提供稳定输入。
 
 ## Requirements
 
 ### Requirement: Provide an order processing subgraph
 
-系统 SHALL 提供独立的订单处理子图，接收本轮用户消息、参考时间、`HistoryConversation` 和 `OrderContext`，并返回重写结果、实体列表、澄清状态及更新后的订单上下文。
+系统 SHALL 提供独立的订单处理子图，接收本轮用户消息、参考时间、`HistoryConversation` 和 `OrderContext`，并返回重写结果、实体列表及更新后的订单上下文。
 
 #### Scenario: Subgraph accepts order parsing state
 
@@ -39,19 +39,14 @@
 - **WHEN** rewrite 成功返回 `extraction_text`
 - **THEN** extract 阶段仅使用该文本与 reference time，而不是再次读取原始消息、历史或订单上下文
 
-### Requirement: Route clarification before extraction
+### Requirement: Always extract after rewrite
 
-系统 SHALL 在 rewrite 返回 `needs_clarification=true` 时进入澄清出口，不得调用实体提取器。
+系统 SHALL 不设置 rewrite 澄清分支。rewrite 完成后 SHALL 始终进入实体提取，再进入订单上下文更新。
 
-#### Scenario: Ambiguous rewrite stops extraction
+#### Scenario: Ambiguous rewrite still reaches extraction
 
-- **WHEN** 用户输入无法根据历史和当前上下文唯一确定目标，rewrite 返回澄清标记
-- **THEN** 子图返回澄清原因和 rewrite 结果，实体列表为空，extract 不被调用
-
-#### Scenario: Successful rewrite reaches extraction
-
-- **WHEN** rewrite 返回 `needs_clarification=false`
-- **THEN** 子图继续调用 extract，并返回提取出的实体列表
+- **WHEN** rewrite 返回可解析的重写结果，包括存在不明确指代的结果
+- **THEN** 子图 SHALL 调用实体提取器，不得跳过 extract 或进入 clarification 节点
 
 ### Requirement: Keep parsing-only boundary
 

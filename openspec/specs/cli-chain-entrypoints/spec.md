@@ -58,7 +58,7 @@ CLI SHALL 将普通消息路由到当前链路对应的图入口：`intent` 只�
 #### Scenario: Order chain invokes only order graph
 
 - **WHEN** 当前链路为 `order` 且用户输入普通消息
-- **THEN** CLI 调用订单处理子图并输出 rewrite、实体和澄清状态
+- **THEN** CLI 调用订单处理子图并输出 rewrite、实体和解析状态
 
 #### Scenario: Full chain composes graphs for order
 
@@ -72,27 +72,17 @@ CLI SHALL 将普通消息路由到当前链路对应的图入口：`intent` 只�
 
 #### Scenario: Full chain completes extraction
 
-- **WHEN** 当前链路为 `full`、意图图输出主意图 `order` 且 rewrite 不需要澄清
+- **WHEN** 当前链路为 `full` 且意图图输出主意图 `order`
 - **THEN** CLI 输出意图计划、订单处理已进入、rewrite 已完成、extract 已执行和实体数量，并展示提取实体
-
-#### Scenario: Full chain reports clarification skip
-
-- **WHEN** 当前链路为 `full`、意图图输出主意图 `order` 且 rewrite 返回 `needs_clarification=true`
-- **THEN** CLI 输出订单处理已进入、rewrite 已完成、澄清原因和 extract 已跳过，不得让用户误认为实体提取已完成
 
 ### Requirement: Expose order processing stage status
 
-full 和 order 链路 SHALL 暴露订单处理阶段状态，至少区分是否进入订单处理子图、rewrite 是否完成、extract 是否执行或跳过、最终实体数量，以及订单上下文是否更新。
+full 和 order 链路 SHALL 暴露订单处理阶段状态，至少区分是否进入订单处理子图、rewrite 是否完成、extract 是否执行、最终实体数量，以及订单上下文是否更新。
 
 #### Scenario: Extraction status is observable
 
 - **WHEN** extract 成功返回实体列表
 - **THEN** CLI 显示 `extract` 已执行和实体数量
-
-#### Scenario: Skipped extraction status is observable
-
-- **WHEN** rewrite 触发澄清并跳过 extract
-- **THEN** CLI 显示 `extract` 已跳过及跳过原因
 
 #### Scenario: Context update status is observable
 
