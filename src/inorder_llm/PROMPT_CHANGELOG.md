@@ -186,6 +186,22 @@
 
 ### `CARGO_PROFILE_SYSTEM_PROMPT`（`cargo_profile/resolver.py`）
 
+#### 2026-08-20T14:07:42+0800
+
+- **变更摘要**:
+  - 强化“货物类型 + 运输规模信息”时的强制估算规则，加入从单件参数、包装、堆积密度到装车占用空间的推理链。
+  - 增加“一吨苹果”和“100箱苹果”典型场景约束，禁止在可推理时返回总体积或尺寸 `null`。
+  - 明确 `dimensions_cm` 表示整体装车占用尺寸，并保留仅有货物名称时允许 `null` 的边界。
+- **原因**: 实际输出中“一吨苹果”被错误判定为无法估算总体积，导致后续车型空间校验缺少输入。
+- **关联**: OpenSpec change `force-cargo-profile-estimation`
+- **评测结果**:
+  - `conda run -n agent python -m pytest tests/test_cargo_profile.py -q` → 9 passed。
+  - `conda run -n agent python -m pytest -q` → 172 passed, 2 skipped。
+  - `tests/test_cargo_profile.py` 新增一吨苹果、100箱苹果及仅货物名称边界场景。
+  - 尚无真实 LLM 评测集，待补充。
+
+---
+
 #### 2026-08-20T10:45:11+0800
 
 - **变更摘要**:

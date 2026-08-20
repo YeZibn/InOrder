@@ -22,12 +22,22 @@
 
 ### Requirement: Provide explicit profile fields
 
-每条货物画像 SHALL 只包含面向后续车型校验的核心属性：`name`、`weight_kg`、`volume_m3`、`dimensions_cm`、`stackability`、`fragility`、`temperature` 和 `reason`。`weight_kg` 表示本次货物总重量，`volume_m3` 表示预计装车占用总体积，`dimensions_cm` 表示整体占用长宽高，所有数值字段使用字段名表达单位，不再要求字段级 `raw`、`unit`、`basis` 或 `confidence` 元数据。
+每条货物画像 SHALL 包含 `name`、`weight_kg`、`volume_m3`、`dimensions_cm`、`stackability`、`fragility`、`temperature` 和 `reason`。当货物类型与总重量、数量、包装、体积或尺寸中的任意运输规模信息同时存在时，系统 MUST 基于常见单件参数、包装规格、堆积密度和装载方式尽力生成 `weight_kg`、`volume_m3` 和整体 `dimensions_cm` 的具体数值；不得仅因缺少直接尺寸或包装而返回 `null`。`weight_kg` 表示本次货物总重量，`volume_m3` 表示预计装车占用总体积，`dimensions_cm` 表示整体装车占用长宽高而不是单件尺寸，所有数值字段使用字段名表达单位，不再要求字段级 `raw`、`unit`、`basis` 或 `confidence` 元数据。
 
 #### Scenario: Profile cargo with sufficient estimation inputs
 
 - **WHEN** 用户提供货物名称及重量、数量、包装或尺寸中的一项或多项足以进行合理估算的信息
 - **THEN** 系统 SHALL 尽力生成 `weight_kg`、`volume_m3` 和 `dimensions_cm` 的具体数值，并在 `reason` 中说明明确值或估算依据
+
+#### Scenario: Estimate volume from cargo type and weight
+
+- **WHEN** 用户输入“一吨苹果”，但未提供数量、包装、体积或尺寸
+- **THEN** 系统 SHALL 根据苹果常见单件重量、数量推断、包装和装载经验估算总体积及整体占用尺寸，并在 `reason` 中说明推理依据
+
+#### Scenario: Estimate weight and volume from cargo type and quantity
+
+- **WHEN** 用户输入“100箱苹果”，但未提供总重量和总体积
+- **THEN** 系统 SHALL 根据常见箱规和单箱重量估算总重量、总体积及整体占用尺寸，并在 `reason` 中说明假设
 
 #### Scenario: Profile cargo with no usable estimation inputs
 
@@ -45,12 +55,17 @@
 
 ### Requirement: Explain profile values with one reason
 
-每条画像 SHALL 包含非空字符串 `reason`。该字段 SHALL 解释核心数值和运输属性是用户明确提供、基于信息推导、基于常识估算，还是因信息不足无法确定。画像不得再要求字段级 `raw`、`unit`、`basis`、`confidence` 或 `warnings`。
+每条画像 SHALL 包含非空字符串 `reason`，解释用户明确值、推导值、基于货物常识的估算值及估算假设。`reason` 不得仅说明“用户未提供”，而必须说明模型尝试使用的物流推理依据；仅在确实没有运输规模信息时说明无法估算的原因。画像不得再要求字段级 `raw`、`unit`、`basis`、`confidence` 或 `warnings`。
 
 #### Scenario: Explain estimated and unavailable values
 
 - **WHEN** 画像同时包含估算值和无法估算的字段
 - **THEN** `reason` SHALL 同时说明估算依据以及无法估算字段的具体原因
+
+#### Scenario: Explain forced estimation chain
+
+- **WHEN** 画像使用货物类型和重量推断数量、包装体积及整体尺寸
+- **THEN** `reason` SHALL 描述从总重量到单件参数、包装和装车占用空间的主要推理链
 
 ### Requirement: Summarize cargo totals
 

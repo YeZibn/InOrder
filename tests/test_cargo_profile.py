@@ -51,6 +51,27 @@ def test_prompt_requires_estimation_reason_and_no_legacy_metadata():
     assert "必须尽力估算" in CARGO_PROFILE_SYSTEM_PROMPT
     assert "reason" in CARGO_PROFILE_SYSTEM_PROMPT
     assert "不得输出 vehicle_type" in CARGO_PROFILE_SYSTEM_PROMPT
+    assert "一吨苹果" in CARGO_PROFILE_SYSTEM_PROMPT
+    assert "100箱苹果" in CARGO_PROFILE_SYSTEM_PROMPT
+    assert "整体装车占用" in CARGO_PROFILE_SYSTEM_PROMPT
+
+
+def test_one_ton_apples_fixture_requires_estimated_space_values():
+    profile = _profile("苹果", weight=1000.0, volume=1.8)
+    profile["reason"] = "总重量为用户明确提供的一吨；按苹果常见单果重量估算数量，再按纸箱或周转筐包装和堆积密度估算装车体积与整体尺寸。"
+    result = parse_cargo_profile_from_text(json.dumps(_payload([profile]), ensure_ascii=False)).to_dict()
+    cargo = result["cargo_profiles"][0]
+    assert cargo["weight_kg"] == 1000.0
+    assert cargo["volume_m3"] is not None
+    assert all(cargo["dimensions_cm"][key] is not None for key in ("length", "width", "height"))
+
+
+def test_one_hundred_boxes_apples_fixture_estimates_weight_and_space():
+    profile = _profile("苹果", weight=2500.0, volume=4.5)
+    profile["reason"] = "按常见苹果箱规和单箱重量估算一百箱总重，再根据箱体尺寸、堆叠方式和装车布局估算总体积与整体尺寸。"
+    result = parse_cargo_profile_from_text(json.dumps(_payload([profile], weight=2500.0, volume=4.5), ensure_ascii=False)).to_dict()
+    assert result["cargo_profiles"][0]["weight_kg"] == 2500.0
+    assert result["cargo_profiles"][0]["volume_m3"] == 4.5
 
 
 def test_parse_compact_profile():

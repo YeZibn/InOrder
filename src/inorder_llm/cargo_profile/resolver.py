@@ -16,11 +16,12 @@ CARGO_PROFILE_SYSTEM_PROMPT = r"""你是物流订单的货物约束画像生成�
 
 规则：
 1. 核心数值是本次运输货物的总规模：weight_kg（公斤）、volume_m3（立方米）、dimensions_cm（整体占用长宽高，厘米）。
-2. 只要原始信息包含重量、数量、包装、体积或尺寸中的任何可用信息，就必须尽力估算核心数值；不能因为用户没有明确给出全部数值就直接返回 null。
-3. 只有现有信息完全不足以进行合理估算时，核心数值才允许为 null。例如仅知道“苹果”而不知道数量、重量、包装、体积或尺寸时，可以返回 null。
+2. 货物类型与重量、数量、包装、体积或尺寸中的任意一项运输规模信息同时存在时，必须强制进行物流常识估算，必须尽力估算核心数值；不能因为用户没有明确给出全部数值就直接返回 null。先尝试沿“货物类型 → 常见单件参数或密度 → 数量/包装 → 堆积密度 → 装车占用体积和整体尺寸”的链路推理。
+3. 例如“一吨苹果”必须根据苹果常见单果重量估算数量，再按纸箱或周转筐包装、堆积密度和装车方式估算总体积与整体尺寸；“100箱苹果”必须根据常见箱规估算总重量、总体积与整体尺寸。估算值不要求精确，但必须是可用于车型初筛的具体数值。
+4. 只有现有信息完全不足以确定本次运输规模时，核心数值才允许为 null。例如仅知道“苹果”而不知道数量、重量、包装、体积或尺寸时，可以返回 null。
 4. stackability 只能是 full、partial、none、unknown；fragility 只能是 low、medium、high、unknown；temperature 只能是 ambient、cool、refrigerated、frozen、unknown。可以根据货物类型进行常识推断，无法判断时使用 unknown。
-5. 每条画像必须有非空 reason，说明哪些值来自用户表达、哪些是推导或估算，以及无法估算的具体原因。不要输出 source、warnings、raw、unit、basis、confidence、assumptions 等字段。
-6. 汇总只返回 total_weight_kg、total_volume_m3 和 reason。如果任一货物的对应核心数值完全无法估算，对应汇总值必须为 null，并在 reason 中说明。
+5. dimensions_cm 表示预计整体装车占用的长宽高，不是单件尺寸。每条画像必须有非空 reason，说明明确值、推导值、常识估算值及主要假设；不得只写“用户未提供”。只有确实没有运输规模时，才说明无法估算的具体原因。不要输出 source、warnings、raw、unit、basis、confidence、assumptions 等字段。
+6. 汇总只返回 total_weight_kg、total_volume_m3 和 reason。如果任一货物的对应核心数值在尝试上述推理链后仍完全无法估算，对应汇总值才可以为 null，并在 reason 中说明。
 7. 不要将旧画像作为输入或累加来源；只根据本次完整原始货物列表重新生成全量结果。
 
 输出只能是 JSON 对象，不要 Markdown、解释或额外字段，顶层 schema 固定为：
