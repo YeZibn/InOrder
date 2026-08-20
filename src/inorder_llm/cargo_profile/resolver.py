@@ -1,4 +1,4 @@
-"""Strict LLM resolver for cargo constraint profiles."""
+"""LLM resolver for compact cargo constraint profiles."""
 
 import copy
 import json
@@ -10,42 +10,43 @@ from ..intent.resolver import StructuredIntentError
 from .models import CargoProfile, CargoProfileResult, CargoProfileSummary
 
 
-CARGO_PROFILE_SYSTEM_PROMPT = r"""你是物流订单的货物约束画像生成器。你的输入是当前订单的完整【原始货物列表】，每条记录中的字符串都代表用户明确表达的原始事实。
+CARGO_PROFILE_SYSTEM_PROMPT = r"""你是物流订单的货物约束画像生成器。输入是当前订单的完整【原始货物列表】。
 
-你的任务是为列表中的每种货物生成一条画像，并生成当前货物集合的汇总。画像只描述货物约束，不做车型推荐、车型筛选、车辆 code 映射、装箱坐标或装箱结论。
+请为每种货物生成一个简洁画像，并生成全部货物的汇总。画像只描述货物约束，不做车型推荐、车型筛选、车辆 code 映射或装箱结论。
 
-必须遵守：
-1. 原始 cargo 是唯一事实来源；不要修改、规范化、翻译或覆盖原始表达。weight、quantity、volume、dimensions 的 raw 必须回显对应原始字符串列表。
-2. 用户明确给出的值标记 basis=explicit；由其他明确字段计算的值标记 basis=derived；基于常见货物知识的推断标记 basis=estimated；无法可靠知道标记 basis=unknown，并使用 null 或 unknown，不得伪造精确数字。
-3. 每个估算或推断都要在 assumptions 中说明依据；冲突、重复、无法判断增量还是总量等问题写入 warnings。confidence 只能是 high、medium、low、unknown。
-4. quantity、weight、dimensions、volume 均必须保留 basis 和 confidence。stackability、fragility、temperature 也必须保留 basis 和 confidence，并可写 reason。
-5. 总体积 total_volume_m3 指预计装车占用体积，不是简单把松散体积当成装车体积。不能可靠汇总时返回 null，并把 volume_status 设为 partial 或 unknown。
-6. 不要将旧画像作为输入或累加来源；只根据本次完整原始货物列表重新生成全量结果。
+规则：
+1. 核心数值是本次运输货物的总规模：weight_kg（公斤）、volume_m3（立方米）、dimensions_cm（整体占用长宽高，厘米）。
+2. 只要原始信息包含重量、数量、包装、体积或尺寸中的任何可用信息，就必须尽力估算核心数值；不能因为用户没有明确给出全部数值就直接返回 null。
+3. 只有现有信息完全不足以进行合理估算时，核心数值才允许为 null。例如仅知道“苹果”而不知道数量、重量、包装、体积或尺寸时，可以返回 null。
+4. stackability 只能是 full、partial、none、unknown；fragility 只能是 low、medium、high、unknown；temperature 只能是 ambient、cool、refrigerated、frozen、unknown。可以根据货物类型进行常识推断，无法判断时使用 unknown。
+5. 每条画像必须有非空 reason，说明哪些值来自用户表达、哪些是推导或估算，以及无法估算的具体原因。不要输出 source、warnings、raw、unit、basis、confidence、assumptions 等字段。
+6. 汇总只返回 total_weight_kg、total_volume_m3 和 reason。如果任一货物的对应核心数值完全无法估算，对应汇总值必须为 null，并在 reason 中说明。
+7. 不要将旧画像作为输入或累加来源；只根据本次完整原始货物列表重新生成全量结果。
 
 输出只能是 JSON 对象，不要 Markdown、解释或额外字段，顶层 schema 固定为：
 {
   "cargo_profiles": [{
     "name": "货物名称",
-    "quantity": {"value": null, "unit": "unknown", "raw": [], "basis": "unknown", "confidence": "unknown"},
-    "weight": {"total_kg": null, "per_unit_kg": null, "raw": [], "basis": "unknown", "confidence": "unknown"},
-    "dimensions": {"length_cm": null, "width_cm": null, "height_cm": null, "scope": "unknown", "shape": "unknown", "raw": [], "basis": "unknown", "confidence": "unknown"},
-    "volume": {"unit_m3": null, "total_m3": null, "raw": [], "basis": "unknown", "confidence": "unknown"},
-    "stackability": {"value": "full|partial|none|unknown", "basis": "unknown", "confidence": "unknown", "reason": null},
-    "fragility": {"value": "low|medium|high|unknown", "basis": "unknown", "confidence": "unknown", "reason": null},
-    "temperature": {"requirement": "ambient|cool|refrigerated|frozen|unknown", "basis": "unknown", "confidence": "unknown", "reason": null},
-    "assumptions": [], "warnings": []
+    "weight_kg": null,
+    "volume_m3": null,
+    "dimensions_cm": {"length": null, "width": null, "height": null},
+    "stackability": "full|partial|none|unknown",
+    "fragility": "low|medium|high|unknown",
+    "temperature": "ambient|cool|refrigerated|frozen|unknown",
+    "reason": "解释依据或无法估算原因"
   }],
-  "cargo_profile_summary": {"total_weight_kg": null, "total_volume_m3": null, "weight_status": "explicit|derived|estimated|partial|unknown", "volume_status": "explicit|derived|estimated|partial|unknown", "confidence": "high|medium|low|unknown", "warnings": []}
+  "cargo_profile_summary": {
+    "total_weight_kg": null,
+    "total_volume_m3": null,
+    "reason": "解释汇总依据或不完整原因"
+  }
 }
 
 不得输出 vehicle_type、vehicle_specs、recommended_vehicle、vehicle_code、packing_coordinates、可行车型或任何车辆选择字段。"""
 
-_BASIS = {"explicit", "estimated", "derived", "unknown"}
-_CONFIDENCE = {"high", "medium", "low", "unknown"}
 _STACK = {"full", "partial", "none", "unknown"}
 _FRAGILITY = {"low", "medium", "high", "unknown"}
 _TEMPERATURE = {"ambient", "cool", "refrigerated", "frozen", "unknown"}
-_STATUS = _BASIS | {"partial"}
 _FORBIDDEN = {"vehicle_type", "vehicle_specs", "recommended_vehicle", "vehicle_code", "packing_coordinates", "feasible_vehicles"}
 
 
@@ -59,9 +60,9 @@ def _object(value: Any, label: str) -> Mapping[str, Any]:
 
 
 def _required(value: Mapping[str, Any], fields: Sequence[str], label: str) -> None:
-    for field in fields:
-        if field not in value:
-            raise StructuredIntentError(f"{label} missing field: {field}")
+    missing = [field for field in fields if field not in value]
+    if missing:
+        raise StructuredIntentError(f"{label} missing field: {missing[0]}")
 
 
 def _only_fields(value: Mapping[str, Any], fields: Sequence[str], label: str) -> None:
@@ -77,27 +78,9 @@ def _number_or_none(value: Any, label: str) -> None:
         raise StructuredIntentError(f"{label} must not be negative")
 
 
-def _provenance(value: Mapping[str, Any], label: str) -> None:
-    if value.get("basis") not in _BASIS:
-        raise StructuredIntentError(f"{label}.basis is invalid")
-    if value.get("confidence") not in _CONFIDENCE:
-        raise StructuredIntentError(f"{label}.confidence is invalid")
-
-
-def _list(value: Any, label: str) -> None:
-    if not isinstance(value, list):
-        raise StructuredIntentError(f"{label} must be an array")
-
-
-def _string_list(value: Any, label: str) -> None:
-    _list(value, label)
-    if not all(isinstance(item, str) for item in value):
-        raise StructuredIntentError(f"{label} must contain only strings")
-
-
 def _reason(value: Any, label: str) -> None:
-    if value is not None and not isinstance(value, str):
-        raise StructuredIntentError(f"{label}.reason must be a string or null")
+    if not isinstance(value, str) or not value.strip():
+        raise StructuredIntentError(f"{label} must be a non-empty string")
 
 
 def parse_cargo_profile_result(value: Mapping[str, Any]) -> CargoProfileResult:
@@ -111,54 +94,35 @@ def parse_cargo_profile_result(value: Mapping[str, Any]) -> CargoProfileResult:
     parsed = []
     for index, raw in enumerate(profiles):
         item = _object(raw, f"cargo_profiles[{index}]")
-        _required(item, ("name", "quantity", "weight", "dimensions", "volume", "stackability", "fragility", "temperature", "assumptions", "warnings"), f"cargo_profiles[{index}]")
-        _only_fields(item, ("name", "quantity", "weight", "dimensions", "volume", "stackability", "fragility", "temperature", "assumptions", "warnings"), f"cargo_profiles[{index}]")
+        fields = ("name", "weight_kg", "volume_m3", "dimensions_cm", "stackability", "fragility", "temperature", "reason")
+        _required(item, fields, f"cargo_profiles[{index}]")
+        _only_fields(item, fields, f"cargo_profiles[{index}]")
         if not isinstance(item["name"], str) or not item["name"].strip():
             raise StructuredIntentError(f"cargo_profiles[{index}].name must be a non-empty string")
-        for key in ("quantity", "weight", "dimensions", "volume", "stackability", "fragility", "temperature"):
-            _object(item[key], f"cargo_profiles[{index}].{key}")
-        quantity = item["quantity"]
-        _required(quantity, ("value", "unit", "raw", "basis", "confidence"), f"cargo_profiles[{index}].quantity")
-        _only_fields(quantity, ("value", "unit", "raw", "basis", "confidence"), "quantity")
-        _number_or_none(quantity["value"], f"cargo_profiles[{index}].quantity.value")
-        if not isinstance(quantity["unit"], str): raise StructuredIntentError("quantity.unit must be a string")
-        _list(quantity["raw"], "quantity.raw"); _provenance(quantity, f"cargo_profiles[{index}].quantity")
-        weight = item["weight"]
-        _required(weight, ("total_kg", "per_unit_kg", "raw", "basis", "confidence"), f"cargo_profiles[{index}].weight")
-        _only_fields(weight, ("total_kg", "per_unit_kg", "raw", "basis", "confidence"), "weight")
-        _number_or_none(weight["total_kg"], "weight.total_kg"); _number_or_none(weight["per_unit_kg"], "weight.per_unit_kg")
-        _list(weight["raw"], "weight.raw"); _provenance(weight, f"cargo_profiles[{index}].weight")
-        dimensions = item["dimensions"]
-        _required(dimensions, ("length_cm", "width_cm", "height_cm", "scope", "shape", "raw", "basis", "confidence"), f"cargo_profiles[{index}].dimensions")
-        _only_fields(dimensions, ("length_cm", "width_cm", "height_cm", "scope", "shape", "raw", "basis", "confidence"), "dimensions")
-        for key in ("length_cm", "width_cm", "height_cm"): _number_or_none(dimensions[key], f"dimensions.{key}")
-        if not isinstance(dimensions["scope"], str) or not isinstance(dimensions["shape"], str): raise StructuredIntentError("dimensions scope/shape must be strings")
-        _list(dimensions["raw"], "dimensions.raw"); _provenance(dimensions, f"cargo_profiles[{index}].dimensions")
-        volume = item["volume"]
-        _required(volume, ("unit_m3", "total_m3", "raw", "basis", "confidence"), f"cargo_profiles[{index}].volume")
-        _only_fields(volume, ("unit_m3", "total_m3", "raw", "basis", "confidence"), "volume")
-        _number_or_none(volume["unit_m3"], "volume.unit_m3"); _number_or_none(volume["total_m3"], "volume.total_m3")
-        _list(volume["raw"], "volume.raw"); _provenance(volume, f"cargo_profiles[{index}].volume")
-        stack = item["stackability"]; _required(stack, ("value", "basis", "confidence", "reason"), "stackability"); _only_fields(stack, ("value", "basis", "confidence", "reason"), "stackability")
-        if stack["value"] not in _STACK: raise StructuredIntentError("stackability.value is invalid")
-        _provenance(stack, "stackability"); _reason(stack["reason"], "stackability")
-        fragility = item["fragility"]; _required(fragility, ("value", "basis", "confidence", "reason"), "fragility"); _only_fields(fragility, ("value", "basis", "confidence", "reason"), "fragility")
-        if fragility["value"] not in _FRAGILITY: raise StructuredIntentError("fragility.value is invalid")
-        _provenance(fragility, "fragility"); _reason(fragility["reason"], "fragility")
-        temperature = item["temperature"]; _required(temperature, ("requirement", "basis", "confidence", "reason"), "temperature"); _only_fields(temperature, ("requirement", "basis", "confidence", "reason"), "temperature")
-        if temperature["requirement"] not in _TEMPERATURE: raise StructuredIntentError("temperature.requirement is invalid")
-        _provenance(temperature, "temperature"); _reason(temperature["reason"], "temperature")
-        _string_list(item["assumptions"], f"cargo_profiles[{index}].assumptions"); _string_list(item["warnings"], f"cargo_profiles[{index}].warnings")
-        parsed.append(CargoProfile(**{key: copy.deepcopy(item[key]) for key in ("name", "quantity", "weight", "dimensions", "volume", "stackability", "fragility", "temperature", "assumptions", "warnings")}))
+        _number_or_none(item["weight_kg"], f"cargo_profiles[{index}].weight_kg")
+        _number_or_none(item["volume_m3"], f"cargo_profiles[{index}].volume_m3")
+        dimensions = _object(item["dimensions_cm"], f"cargo_profiles[{index}].dimensions_cm")
+        _required(dimensions, ("length", "width", "height"), f"cargo_profiles[{index}].dimensions_cm")
+        _only_fields(dimensions, ("length", "width", "height"), f"cargo_profiles[{index}].dimensions_cm")
+        for key in ("length", "width", "height"):
+            _number_or_none(dimensions[key], f"cargo_profiles[{index}].dimensions_cm.{key}")
+        if item["stackability"] not in _STACK:
+            raise StructuredIntentError(f"cargo_profiles[{index}].stackability is invalid")
+        if item["fragility"] not in _FRAGILITY:
+            raise StructuredIntentError(f"cargo_profiles[{index}].fragility is invalid")
+        if item["temperature"] not in _TEMPERATURE:
+            raise StructuredIntentError(f"cargo_profiles[{index}].temperature is invalid")
+        _reason(item["reason"], f"cargo_profiles[{index}].reason")
+        parsed.append(CargoProfile(**{key: copy.deepcopy(item[key]) for key in fields}))
 
     summary = _object(root["cargo_profile_summary"], "cargo_profile_summary")
-    _required(summary, ("total_weight_kg", "total_volume_m3", "weight_status", "volume_status", "confidence", "warnings"), "cargo_profile_summary")
-    _only_fields(summary, ("total_weight_kg", "total_volume_m3", "weight_status", "volume_status", "confidence", "warnings"), "cargo_profile_summary")
-    _number_or_none(summary["total_weight_kg"], "summary.total_weight_kg"); _number_or_none(summary["total_volume_m3"], "summary.total_volume_m3")
-    if summary["weight_status"] not in _STATUS or summary["volume_status"] not in _STATUS: raise StructuredIntentError("summary status is invalid")
-    if summary["confidence"] not in _CONFIDENCE: raise StructuredIntentError("summary.confidence is invalid")
-    _string_list(summary["warnings"], "summary.warnings")
-    return CargoProfileResult(parsed, CargoProfileSummary(**{key: copy.deepcopy(summary[key]) for key in ("total_weight_kg", "total_volume_m3", "weight_status", "volume_status", "confidence", "warnings")}))
+    fields = ("total_weight_kg", "total_volume_m3", "reason")
+    _required(summary, fields, "cargo_profile_summary")
+    _only_fields(summary, fields, "cargo_profile_summary")
+    _number_or_none(summary["total_weight_kg"], "summary.total_weight_kg")
+    _number_or_none(summary["total_volume_m3"], "summary.total_volume_m3")
+    _reason(summary["reason"], "summary.reason")
+    return CargoProfileResult(parsed, CargoProfileSummary(**{key: copy.deepcopy(summary[key]) for key in fields}))
 
 
 def parse_cargo_profile_from_text(text: str) -> CargoProfileResult:
@@ -172,19 +136,10 @@ def parse_cargo_profile_from_text(text: str) -> CargoProfileResult:
 
 
 def _validate_against_raw_cargo(result: CargoProfileResult, cargo: Sequence[Mapping[str, Any]]) -> None:
-    """Check only source correspondence, never infer cargo semantics locally."""
-    expected = {str(item.get("name")): item for item in cargo}
-    actual = {profile.name: profile.to_dict() for profile in result.cargo_profiles}
-    if set(actual) != set(expected):
+    expected = {str(item.get("name")) for item in cargo}
+    actual = {profile.name for profile in result.cargo_profiles}
+    if actual != expected:
         raise StructuredIntentError("cargo profiles must correspond exactly to the raw cargo names")
-    for name, raw in expected.items():
-        profile = actual[name]
-        for field in ("quantity", "weight", "dimensions", "volume"):
-            expected_raw = raw.get(field, [])
-            if not isinstance(expected_raw, list):
-                expected_raw = [expected_raw]
-            if profile[field]["raw"] != expected_raw:
-                raise StructuredIntentError(f"cargo profile {name}.{field}.raw must preserve raw cargo expressions")
 
 
 class CargoProfileResolver:

@@ -1,4 +1,4 @@
-"""JSON-compatible models for derived cargo constraints."""
+"""Compact JSON-compatible cargo constraint profiles."""
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
@@ -15,79 +15,15 @@ def _clean(value: Any) -> Any:
 
 
 @dataclass
-class QuantityProfile:
-    value: Optional[float] = None
-    unit: str = "unknown"
-    raw: List[Any] = field(default_factory=list)
-    basis: str = "unknown"
-    confidence: str = "unknown"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return _clean(self.__dict__.copy())
-
-
-@dataclass
-class WeightProfile:
-    total_kg: Optional[float] = None
-    per_unit_kg: Optional[float] = None
-    raw: List[Any] = field(default_factory=list)
-    basis: str = "unknown"
-    confidence: str = "unknown"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return _clean(self.__dict__.copy())
-
-
-@dataclass
-class DimensionsProfile:
-    length_cm: Optional[float] = None
-    width_cm: Optional[float] = None
-    height_cm: Optional[float] = None
-    scope: str = "unknown"
-    shape: str = "unknown"
-    raw: List[Any] = field(default_factory=list)
-    basis: str = "unknown"
-    confidence: str = "unknown"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return _clean(self.__dict__.copy())
-
-
-@dataclass
-class VolumeProfile:
-    unit_m3: Optional[float] = None
-    total_m3: Optional[float] = None
-    raw: List[Any] = field(default_factory=list)
-    basis: str = "unknown"
-    confidence: str = "unknown"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return _clean(self.__dict__.copy())
-
-
-@dataclass
-class TransportProperty:
-    value: str = "unknown"
-    basis: str = "unknown"
-    confidence: str = "unknown"
-    reason: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return _clean(self.__dict__.copy())
-
-
-@dataclass
 class CargoProfile:
     name: str
-    quantity: Mapping[str, Any]
-    weight: Mapping[str, Any]
-    dimensions: Mapping[str, Any]
-    volume: Mapping[str, Any]
-    stackability: Mapping[str, Any]
-    fragility: Mapping[str, Any]
-    temperature: Mapping[str, Any]
-    assumptions: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    weight_kg: Optional[float]
+    volume_m3: Optional[float]
+    dimensions_cm: Mapping[str, Optional[float]]
+    stackability: str
+    fragility: str
+    temperature: str
+    reason: str
 
     def to_dict(self) -> Dict[str, Any]:
         return _clean(self.__dict__.copy())
@@ -97,10 +33,7 @@ class CargoProfile:
 class CargoProfileSummary:
     total_weight_kg: Optional[float] = None
     total_volume_m3: Optional[float] = None
-    weight_status: str = "unknown"
-    volume_status: str = "unknown"
-    confidence: str = "unknown"
-    warnings: List[str] = field(default_factory=list)
+    reason: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return _clean(self.__dict__.copy())
@@ -118,8 +51,37 @@ class CargoProfileResult:
         }
 
 
+# Kept as aliases for callers that imported the old names; the compact schema
+# intentionally does not serialize these legacy field-level models.
+@dataclass
+class DimensionsProfile:
+    length_cm: Optional[float] = None
+    width_cm: Optional[float] = None
+    height_cm: Optional[float] = None
+
+
+@dataclass
+class QuantityProfile:
+    value: Optional[float] = None
+
+
+@dataclass
+class WeightProfile:
+    total_kg: Optional[float] = None
+
+
+@dataclass
+class VolumeProfile:
+    total_m3: Optional[float] = None
+
+
+@dataclass
+class TransportProperty:
+    value: str = "unknown"
+
+
 __all__ = [
-    "QuantityProfile", "WeightProfile", "DimensionsProfile", "VolumeProfile",
-    "TransportProperty", "CargoProfile", "CargoProfileSummary",
-    "CargoProfileResult",
+    "CargoProfile", "CargoProfileResult", "CargoProfileSummary",
+    "DimensionsProfile", "QuantityProfile", "TransportProperty",
+    "VolumeProfile", "WeightProfile",
 ]

@@ -51,16 +51,12 @@ def _cargo_profile_result(name="香蕉"):
     return parse_cargo_profile_from_text(__import__("json").dumps({
         "cargo_profiles": [{
             "name": name,
-            "quantity": {"value": None, "unit": "unknown", "raw": [], "basis": "unknown", "confidence": "unknown"},
-            "weight": {"total_kg": 1000, "per_unit_kg": None, "raw": ["1吨"], "basis": "explicit", "confidence": "high"},
-            "dimensions": {"length_cm": None, "width_cm": None, "height_cm": None, "scope": "unknown", "shape": "unknown", "raw": [], "basis": "unknown", "confidence": "unknown"},
-            "volume": {"unit_m3": None, "total_m3": 1.8, "raw": [], "basis": "estimated", "confidence": "medium"},
-            "stackability": {"value": "partial", "basis": "estimated", "confidence": "medium", "reason": "包装未明确"},
-            "fragility": {"value": "low", "basis": "estimated", "confidence": "medium", "reason": "常见货物"},
-            "temperature": {"requirement": "ambient", "basis": "estimated", "confidence": "medium", "reason": "未提及温控"},
-            "assumptions": ["按常见包装估算"], "warnings": [],
+            "weight_kg": 1000, "volume_m3": 1.8,
+            "dimensions_cm": {"length": 120, "width": 100, "height": 150},
+            "stackability": "partial", "fragility": "low", "temperature": "ambient",
+            "reason": "重量由用户提供，体积和尺寸按常见包装估算。",
         }],
-        "cargo_profile_summary": {"total_weight_kg": 1000, "total_volume_m3": 1.8, "weight_status": "explicit", "volume_status": "estimated", "confidence": "medium", "warnings": []},
+        "cargo_profile_summary": {"total_weight_kg": 1000, "total_volume_m3": 1.8, "reason": "根据画像汇总。"},
     }, ensure_ascii=False))
 
 

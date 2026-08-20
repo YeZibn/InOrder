@@ -186,6 +186,21 @@
 
 ### `CARGO_PROFILE_SYSTEM_PROMPT`（`cargo_profile/resolver.py`）
 
+#### 2026-08-20T10:45:11+0800
+
+- **变更摘要**:
+  - 将画像输出简化为 `weight_kg`、`volume_m3`、`dimensions_cm`、运输属性和 `reason`。
+  - 删除 `raw`、`unit`、`basis`、`confidence`、`assumptions`、`warnings` 等字段要求。
+  - 规定有可用信息时必须尽力估算核心数值，只有完全无法估算时才允许 `null`。
+- **原因**: 为后续车型载重和货厢尺寸校验提供直接输入，避免字段过度复杂或在可估算时无理由返回空值。
+- **关联**: OpenSpec change `simplify-cargo-profile-estimation`
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q` → 170 passed, 2 skipped。
+  - `tests/test_cargo_profile.py` 覆盖简化 schema、非空 reason、可估算与完全无法估算场景。
+  - 尚无真实 LLM 评测集，待补充。
+
+---
+
 #### 2026-08-19T15:36:52+0800
 
 - **变更摘要**:

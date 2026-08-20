@@ -1,24 +1,4 @@
-# cargo-profile Specification
-
-## Purpose
-
-为订单货物生成结构化、可解释且可序列化的运输约束画像，为后续重量、体积和车辆可行性校验提供输入，但不直接选择车型。
-
-## Requirements
-
-### Requirement: Generate cargo constraint profiles
-
-系统 SHALL 基于当前完整的原始货物记录调用 LLM 生成货物画像；画像 SHALL 按货物名称对应每种货物，并不得覆盖或改写原始 `cargo` 记录。
-
-#### Scenario: Profile cargo with raw attributes
-
-- **WHEN** 当前货物包含 `name=香蕉`、`weight=["1吨"]` 且其他原始属性为空
-- **THEN** 系统返回香蕉画像，并保留原始货物记录不变
-
-#### Scenario: Profile multiple cargo types
-
-- **WHEN** 当前上下文包含苹果和香蕉两种货物
-- **THEN** 系统分别返回两条画像，不将不同货物合并为一条画像
+## MODIFIED Requirements
 
 ### Requirement: Provide explicit profile fields
 
@@ -65,15 +45,6 @@
 
 - **WHEN** 至少一种货物的重量或体积完全无法估算
 - **THEN** 对应汇总字段 SHALL 返回 `null`，不得生成无依据的替代数值
-
-### Requirement: Replace derived profile atomically
-
-货物画像 SHALL 被视为基于当前完整 `cargo` 的派生数据；当原始货物发生新增、替换或删除时，系统 SHALL 基于完整货物集合重新生成并整体替换画像及汇总，不得按旧画像做增量拼接。
-
-#### Scenario: Rebuild after cargo addition
-
-- **WHEN** 已有苹果画像且原始货物新增一条苹果重量
-- **THEN** 系统重新生成苹果画像和汇总，不重复累加旧画像结果
 
 ### Requirement: Keep profile generation separate from vehicle selection
 
