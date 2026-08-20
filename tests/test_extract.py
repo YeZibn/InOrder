@@ -55,19 +55,19 @@ def test_prompt_contains_normalization_rules():
 
 def test_prompt_separates_vehicle_types_and_specs():
     p = EXTRACTION_SYSTEM_PROMPT
-    for code in ("truck_4m2", "cold_chain", "enclosed", "high_rail", "flatbed",
-                 "dangerous_goods", "high_roof", "tail_lift"):
-        assert code in p
+    for label in ("4米2", "冷链", "厢式", "高栏", "平板", "危险品", "高顶", "尾板"):
+        assert label in p
     assert "不得输出为 `vehicle_type`" in p
     assert "多个规格必须各输出一个独立的 `vehicle_specs` entity" in p
-    assert "X米以上" in p and "不要在此处推导" in p
+    assert "X米以上" in p and "不要把“小车”" in p
 
 
-def test_prompt_vehicle_examples_preserve_text_and_use_catalog_codes():
+def test_prompt_vehicle_examples_preserve_text_without_code_generation():
     p = EXTRACTION_SYSTEM_PROMPT
-    assert '"extraction_text":"冷链车","attributes":{"value":"cold_chain"}' in p
-    assert '"extraction_text":"4米2","attributes":{"value":"truck_4m2"}' in p
-    assert '"extraction_text":"带尾板","attributes":{"value":"tail_lift"}' in p
+    assert '"extraction_text":"冷链车","attributes":{"value":"冷链车"}' in p
+    assert '"extraction_text":"4米2","attributes":{"value":"4米2"}' in p
+    assert '"extraction_text":"带尾板","attributes":{"value":"带尾板"}' in p
+    assert "不得输出 canonical code" in p
 
 
 def test_prompt_contains_action_few_shot_examples():
@@ -203,12 +203,13 @@ def test_extract_location_rejects_full_address_outside_source():
         )
 
 
-def test_extract_vehicle_type_normalized_value():
-    payload = {"entities": [{"type": "vehicle_type", "action": "set", "extraction_text": "中面",
-                             "attributes": {"extraction_text": "中面"}}]}
+def test_extract_vehicle_type_preserves_source_value():
+    payload = {"entities": [{"type": "vehicle_type", "action": "set", "extraction_text": "面包车",
+                             "attributes": {"value": "面包车"}}]}
     client = FakeLLMClient(json.dumps(payload))
     entities = extract_entities(client, "来个面包车", [], "2026-08-14 10:00")
-    assert entities[0].extraction_text == "中面"
+    assert entities[0].extraction_text == "面包车"
+    assert entities[0].attributes["value"] == "面包车"
 
 
 def test_extract_cargo_attributes():

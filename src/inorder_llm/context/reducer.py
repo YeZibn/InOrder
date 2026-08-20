@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping
 
 from ..extract.models import Entity
+from ..catalog import find_vehicle_spec, find_vehicle_type
 from ..normalization import normalize_entities
 from .models import OrderContext
 
@@ -93,11 +94,23 @@ class OrderContextReducer:
         elif entity.type == "cargo":
             self._cargo(context, entity)
         elif entity.type == "vehicle_specs":
-            self._list(context, "vehicle_specs", _value(entity), entity)
+            value = _value(entity)
+            # Extract now preserves source expressions.  Until the dedicated
+            # vehicle normalizer runs, unresolved expressions must not be
+            # mistaken for canonical context values.
+            record = find_vehicle_spec(value)
+            if record is not None:
+                self._list(context, "vehicle_specs", record.code, entity)
         elif entity.type == "remark":
             self._remark(context, entity)
         elif entity.type in _SCALAR_TYPES:
-            self._single(context, _SCALAR_TYPES[entity.type], _value(entity), entity)
+            value = _value(entity)
+            if entity.type == "vehicle_type":
+                record = find_vehicle_type(value)
+                if record is None:
+                    return
+                value = record.code
+            self._single(context, _SCALAR_TYPES[entity.type], value, entity)
         else:
             raise ContextReductionError("unsupported entity type: " + entity.type)
 

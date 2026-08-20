@@ -187,8 +187,8 @@ def test_reducer_list_and_remark_actions():
     reducer = OrderContextReducer()
     context = reducer.apply(OrderContext(), [Entity("vehicle_specs", "set", {"extraction_text": "高顶"}), Entity("remark", "set", {"value": "易碎轻放"})])
     context = reducer.apply(context, [Entity("vehicle_specs", "add", {"extraction_text": "带尾板"}), Entity("remark", "add", {"value": "装货地电联"})])
-    assert context.vehicle_specs == ["高顶", "带尾板"]
+    assert context.vehicle_specs == ["high_roof", "tail_lift"]
     assert context.remark == "易碎轻放;装货地电联"
     context = reducer.apply(context, [Entity("vehicle_specs", "replace", {"extraction_text": "封闭式"}), Entity("remark", "replace", {"value": "新备注"})])
-    assert context.vehicle_specs == ["封闭式"]
+    assert context.vehicle_specs == ["enclosed"]
     assert context.remark == "新备注"

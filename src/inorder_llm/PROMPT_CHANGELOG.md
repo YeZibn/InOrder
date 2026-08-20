@@ -84,6 +84,18 @@
 
 ### `EXTRACTION_SYSTEM_PROMPT`（`extract/resolver.py`）
 
+#### 2026-08-20T17:20:02+0800
+
+- **变更摘要**:
+  - 车型和车辆规格改为从 catalog 动态展示词汇，避免 prompt 重复维护车型清单。
+  - `vehicle_type` 与 `vehicle_specs` 保留用户原文，不再要求 LLM 直接生成 canonical code。
+  - 增加模糊车型、范围车型和历史指代的后置归一边界示例。
+- **原因**: 将原文识别与车型归一职责分离，避免模型强行选择错误车型或输出不存在的 code，为后续独立车型归一模块提供稳定输入。
+- **关联**: OpenSpec change `separate-vehicle-extraction-from-normalization`
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q tests/test_vehicle_catalog.py tests/test_extract.py tests/test_langextract_adapter.py tests/test_order_processing_graph.py` → 67 passed, 1 skipped。
+  - `tests/test_extract.py` 覆盖 catalog 词汇、原文保留和不直接生成 code；尚无真实 LLM 评测集，待补充。
+
 #### 2026-08-19T16:25:21+0800
 
 - **变更摘要**:
@@ -128,6 +140,18 @@
 ---
 
 ### `LANGEXTRACT_ORDER_PROMPT_DESCRIPTION`（`extract/resolver.py`）
+
+#### 2026-08-20T17:20:02+0800
+
+- **变更摘要**:
+  - LangExtract prompt 使用 catalog 动态生成车型/规格词汇。
+  - 组合车型仍拆分为 `vehicle_type` 与多个 `vehicle_specs`，但所有车型字段保留用户原文，不生成 canonical code。
+  - 增加“小车”“9米以上”等不确定表达的 grounded few-shot。
+- **原因**: LangExtract 需要保留可回溯的车型原文，后续由独立 normalizer 负责确定 code、范围和模糊语义。
+- **关联**: OpenSpec change `separate-vehicle-extraction-from-normalization`
+- **评测结果**:
+  - `conda run -n agent python -m pytest -q tests/test_vehicle_catalog.py tests/test_extract.py tests/test_langextract_adapter.py tests/test_order_processing_graph.py` → 67 passed, 1 skipped。
+  - `tests/test_langextract_adapter.py` 覆盖 grounded vehicle source preservation；尚无真实 LLM 评测集，待补充。
 
 #### 2026-08-19T16:25:21+0800
 

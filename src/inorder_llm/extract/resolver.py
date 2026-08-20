@@ -4,11 +4,14 @@ from typing import Any, List, Mapping, Sequence
 
 from ..infrastructure.llm import ChatMessage, LLMClient
 from ..intent.resolver import StructuredIntentError
+from ..catalog import render_vehicle_prompt_vocabulary
 from .models import Entity
 
-LANGEXTRACT_ORDER_PROMPT_DESCRIPTION = """你是物流订单 grounded entity extractor。仅从【待提取文本】选择连续原文作为 extraction_text；【参考时间】仅用于相对时间计算，不能作为实体来源。每个实体 attributes 必须包含 action，且 action 只能是 add、set、remove、replace，由模型决定。不得猜测、补全或重写用户未表达的字段；未识别实体时返回空提取。
+LANGEXTRACT_ORDER_PROMPT_DESCRIPTION = f"""你是物流订单 grounded entity extractor。仅从【待提取文本】选择连续原文作为 extraction_text；【参考时间】仅用于相对时间计算，不能作为实体来源。每个实体 attributes 必须包含 action，且 action 只能是 add、set、remove、replace，由模型决定。不得猜测、补全或重写用户未表达的字段；未识别实体时返回空提取。
 
-支持 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark、order_id。location 必须给 role=pickup/dropoff，并可包含用户明确表达的 city 与 full_address；full_address 必须来自待提取文本中的连续地址原文，不得补全或改写。time 给 context/start/end；车型和规格给目录 code 的 value。remark 的 extraction_text 为用户原文，attributes.value 为简短业务概括。"""
+支持 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark、order_id。location 必须给 role=pickup/dropoff，并可包含用户明确表达的 city 与 full_address；full_address 必须来自待提取文本中的连续地址原文，不得补全或改写。time 给 context/start/end。车型和规格必须保留用户原文，不要生成或猜测 canonical code；remark 的 extraction_text 为用户原文，attributes.value 为简短业务概括。
+
+{render_vehicle_prompt_vocabulary()}"""
 
 
 def format_langextract_source(message: str, reference_time: str) -> str:
@@ -35,9 +38,9 @@ def build_langextract_order_examples():
         ]),
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】再加一吨苹果，4米2冷链厢式车", [
             Extraction("cargo", "一吨苹果", attributes={"action": "add", "name": "苹果", "weight": "1吨", "quantity": None, "volume": None, "dimensions": None}),
-            Extraction("vehicle_type", "4米2", attributes={"action": "set", "value": "truck_4m2"}),
-            Extraction("vehicle_specs", "冷链", attributes={"action": "set", "value": "cold_chain"}),
-            Extraction("vehicle_specs", "厢式", attributes={"action": "set", "value": "enclosed"}),
+            Extraction("vehicle_type", "4米2", attributes={"action": "set", "value": "4米2"}),
+            Extraction("vehicle_specs", "冷链", attributes={"action": "set", "value": "冷链"}),
+            Extraction("vehicle_specs", "厢式", attributes={"action": "set", "value": "厢式"}),
         ]),
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】明天上午王强收，电话13800138000，苹果容易碎轻拿轻放", [
             Extraction("time", "明天上午", attributes={"action": "set", "context": "new_order", "start": "2026-08-18 06:00", "end": "2026-08-18 12:00"}),
@@ -52,6 +55,10 @@ def build_langextract_order_examples():
             Extraction("invoice_type", "不开票", attributes={"action": "set", "value": 1}),
             Extraction("service_type", "快车", attributes={"action": "set", "value": "express"}),
             Extraction("order_id", "订单A123", attributes={"action": "set", "context": "history"}),
+        ]),
+        ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】小车，9米以上", [
+            Extraction("vehicle_type", "小车", attributes={"action": "set", "value": "小车"}),
+            Extraction("vehicle_type", "9米以上", attributes={"action": "set", "value": "9米以上"}),
         ]),
     ]
 
@@ -109,24 +116,13 @@ phone —— 手机号
 
 vehicle_type —— 基础车型或标准车长
 - 只提取基础车型和标准车长，不提取车辆能力、车厢类型、运输要求或装卸设备。
-- 支持的基础车型 code：
-  four_wheel_small（四轮小件）、micro_van（微面）、small_van（小面）、
-  medium_van（中面）、large_van（大面）、iveco（依维柯）、micro_truck（微货）、
-  small_truck（小货）、medium_truck（中货）。
-- 支持的标准车长 code：
-  truck_3m8（3米8）、truck_4m2（4米2）、truck_5m2（5米2）、truck_6m2（6米2）、
-  truck_6m8（6米8）、truck_7m6（7米6）、truck_8m2（8米2）、truck_8m6（8米6）、
-  truck_9m6（9米6）、truck_11m7（11米7）、truck_12m5（12米5）、truck_13m（13米）、
-  truck_13m7（13米7）、truck_15m（15米）、truck_16m（16米）、truck_17m5（17米5）。
-- `attributes.value` 必须使用上述目录 code；`extraction_text` 保留用户在本轮使用的原文短语。
-- 明确别名：小拉/轿车 → four_wheel_small；小面包 → small_van；面包车 → medium_van。
-- 不要在此处推导微面/小面、中面/大面、微货/小货/中货之间的关系，也不要将“X米以上”选择为某个标准车长。
+- 车型词汇以本提示中的 catalog 词汇为参考；`extraction_text` 必须保留用户本轮使用的连续原文短语。
+- 不要求、不得猜测或强制生成 canonical code；`attributes.value` 如需输出也必须保留用户原文表达。
+- 不要把“小车”“X米左右”“X米以上”“之前那个车”等模糊、范围或指代表达选择成某个具体车型。
 
 vehicle_specs —— 车辆能力、车厢类型、运输要求或装卸设备
-- 支持的规格 code：cold_chain（冷链）、enclosed（厢式）、high_rail（高栏）、
-  flatbed（平板）、dangerous_goods（危险品）、high_roof（高顶）、tail_lift（尾板）。
 - 冷链、厢式、高栏、平板、危险品、高顶、尾板及其别名 MUST 输出为 `vehicle_specs`，不得输出为 `vehicle_type`。
-- `attributes.value` 必须使用上述目录 code；`extraction_text` 保留用户原文短语。
+- `extraction_text` 必须保留用户原文短语；不要求、不得猜测或强制生成 canonical code。
 - 同一句中的多个规格必须各输出一个独立的 `vehicle_specs` entity，不要拼成一个值。
 
 cargo —— 货物信息
@@ -202,7 +198,7 @@ Few-shot 示例：
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：车型规格换成冷链车
 输出：
-{"entities":[{"type":"vehicle_specs","action":"replace","extraction_text":"冷链车","attributes":{"value":"cold_chain"}}]}
+{"entities":[{"type":"vehicle_specs","action":"replace","extraction_text":"冷链车","attributes":{"value":"冷链车"}}]}
 
 示例5（history context）：
 输入：【参考时间】2026-08-14 10:00（星期五）
@@ -217,26 +213,26 @@ assistant: 已为您创建草稿
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：要冷链车
 输出：
-{"entities":[{"type":"vehicle_specs","action":"set","extraction_text":"冷链车","attributes":{"value":"cold_chain"}}]}
+{"entities":[{"type":"vehicle_specs","action":"set","extraction_text":"冷链车","attributes":{"value":"冷链车"}}]}
 
 示例7（combined vehicle and specs）：
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：要一辆4米2冷链厢式车
 输出：
-{"entities":[{"type":"vehicle_type","action":"set","extraction_text":"4米2","attributes":{"value":"truck_4m2"}},{"type":"vehicle_specs","action":"set","extraction_text":"冷链","attributes":{"value":"cold_chain"}},{"type":"vehicle_specs","action":"set","extraction_text":"厢式","attributes":{"value":"enclosed"}}]}
+{"entities":[{"type":"vehicle_type","action":"set","extraction_text":"4米2","attributes":{"value":"4米2"}},{"type":"vehicle_specs","action":"set","extraction_text":"冷链","attributes":{"value":"冷链"}},{"type":"vehicle_specs","action":"set","extraction_text":"厢式","attributes":{"value":"厢式"}}]}
 
 示例8（multiple specs independently）：
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：4米2高顶带尾板
 输出：
-{"entities":[{"type":"vehicle_type","action":"set","extraction_text":"4米2","attributes":{"value":"truck_4m2"}},{"type":"vehicle_specs","action":"set","extraction_text":"高顶","attributes":{"value":"high_roof"}},{"type":"vehicle_specs","action":"set","extraction_text":"带尾板","attributes":{"value":"tail_lift"}}]}
+{"entities":[{"type":"vehicle_type","action":"set","extraction_text":"4米2","attributes":{"value":"4米2"}},{"type":"vehicle_specs","action":"set","extraction_text":"高顶","attributes":{"value":"高顶"}},{"type":"vehicle_specs","action":"set","extraction_text":"带尾板","attributes":{"value":"带尾板"}}]}
 
 输出：仅返回符合以下 schema 的 JSON 对象：
 {"entities":[{"type":"<实体类型>","action":"add"|"set"|"remove"|"replace","extraction_text":"<原文短语或概括>","attributes":{<类型特定属性>}}]}
 - "type"、"action"、"extraction_text"、"attributes" 均为必填。
 - 未识别到任何实体时返回 {"entities": []}。
 不要包含任何其他键、文字或解释。
-"""
+""" + "\n车型 catalog 词汇（仅用于识别和分类，车型字段必须保留用户原文，不得输出 canonical code）：\n" + render_vehicle_prompt_vocabulary()
 
 _VALID_ACTIONS = ("add", "set", "remove", "replace")
 _REQUIRED_FIELDS = ("type", "action", "extraction_text", "attributes")

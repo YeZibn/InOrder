@@ -7,6 +7,7 @@ from inorder_llm.catalog import (
     get_vehicle_type,
     iter_vehicle_specs,
     iter_vehicle_types,
+    render_vehicle_prompt_vocabulary,
 )
 
 
@@ -48,6 +49,12 @@ def test_vehicle_specs_catalog_contains_confirmed_specs_and_groups():
 def test_catalog_readers_are_stable_and_do_not_infer_ambiguous_values():
     assert iter_vehicle_types() is VEHICLE_TYPES
     assert iter_vehicle_specs() is VEHICLE_SPECS
+
+
+def test_prompt_vocabulary_is_rendered_from_catalog_labels_and_aliases():
+    prompt = render_vehicle_prompt_vocabulary()
+    assert "4米2（truck_4m2）：4米2、四米二、4.2米" in prompt
+    assert "冷链（cold_chain）：冷链、冷链车、冷藏车" in prompt
     assert find_vehicle_type("之前那个车") is None
     assert find_vehicle_type("4米以上") is None
     assert find_vehicle_spec("冷链4米2") is None

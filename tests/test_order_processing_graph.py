@@ -246,6 +246,32 @@ def test_graph_supports_set_replace_and_remove_context_actions():
     assert context.vehicle_specs == []
 
 
+def test_unresolved_vehicle_source_is_not_written_as_canonical_context_value():
+    context = OrderContext()
+    context = OrderContextReducer().apply(
+        context,
+        [Entity("vehicle_type", "set", {"value": "小车"}, "小车")],
+    )
+    assert context.vehicle_type is None
+
+
+def test_resolved_catalog_vehicle_value_can_update_context():
+    context = OrderContextReducer().apply(
+        OrderContext(),
+        [Entity("vehicle_type", "set", {"value": "truck_4m2"}, "4米2")],
+    )
+    assert context.vehicle_type == "truck_4m2"
+
+
+def test_vehicle_alias_is_canonicalized_only_at_context_boundary():
+    context = OrderContextReducer().apply(
+        OrderContext(),
+        [Entity("vehicle_type", "set", {"value": "4米2"}, "4米2"), Entity("vehicle_specs", "set", {"value": "冷链"}, "冷链")],
+    )
+    assert context.vehicle_type == "truck_4m2"
+    assert context.vehicle_specs == ["cold_chain"]
+
+
 def test_best_effort_rewrite_preserves_original_order_context_when_no_entities():
     original = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
     rewrite = FakeRewriteModel(RewriteResult("选择最合理车型", "设置车型"))

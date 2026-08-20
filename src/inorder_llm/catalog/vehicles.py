@@ -170,6 +170,30 @@ def iter_vehicle_specs() -> Tuple[VehicleSpec, ...]:
     return VEHICLE_SPECS
 
 
+def render_vehicle_prompt_vocabulary() -> str:
+    """Render the catalog vocabulary used by extraction prompts.
+
+    This is deliberately a presentation helper rather than a matcher: the
+    catalog remains the sole source of labels and aliases, while extraction
+    still preserves the expression used by the user.
+    """
+
+    type_lines = []
+    for item in VEHICLE_TYPES:
+        aliases = "、".join(item.aliases)
+        type_lines.append(f"- {item.label}（{item.code}）：{aliases}")
+    spec_lines = []
+    for item in VEHICLE_SPECS:
+        aliases = "、".join(item.aliases)
+        spec_lines.append(f"- {item.label}（{item.code}）：{aliases}")
+    return (
+        "基础车型/标准车长词汇（仅用于识别和分类，输出保留用户原文）：\n"
+        + "\n".join(type_lines)
+        + "\n车辆规格词汇（仅用于识别和分类，输出保留用户原文）：\n"
+        + "\n".join(spec_lines)
+    )
+
+
 __all__ = [
     "VehicleType",
     "VehicleSpec",
@@ -183,4 +207,5 @@ __all__ = [
     "find_vehicle_spec",
     "iter_vehicle_types",
     "iter_vehicle_specs",
+    "render_vehicle_prompt_vocabulary",
 ]

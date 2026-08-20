@@ -35,6 +35,15 @@ def test_mapper_preserves_llm_semantic_attributes_without_inference():
     assert entities[1].attributes == {"name": "苹果", "action": "remove"}
 
 
+def test_mapper_preserves_vehicle_source_without_catalog_conversion():
+    entities = map_grounded_extractions(
+        [GroundedExtraction("vehicle_type", "4.2米", {"value": "4.2米", "action": "set"})],
+        "4.2米",
+    )
+    assert entities[0].extraction_text == "4.2米"
+    assert entities[0].attributes["value"] == "4.2米"
+
+
 def test_mapper_preserves_location_city_and_full_address():
     entities = map_grounded_extractions(
         [

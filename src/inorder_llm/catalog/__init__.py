@@ -18,6 +18,7 @@ from .vehicles import (
     get_vehicle_type,
     iter_vehicle_specs,
     iter_vehicle_types,
+    render_vehicle_prompt_vocabulary,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "find_vehicle_spec",
     "iter_vehicle_types",
     "iter_vehicle_specs",
+    "render_vehicle_prompt_vocabulary",
 ]
