@@ -1,3 +1,5 @@
+import pytest
+
 from inorder_llm.catalog import (
     VEHICLE_SPECS,
     VEHICLE_TYPES,
@@ -5,8 +7,11 @@ from inorder_llm.catalog import (
     find_vehicle_type,
     get_vehicle_spec,
     get_vehicle_type,
+    find_vehicle_keyword,
     iter_vehicle_specs,
     iter_vehicle_types,
+    iter_vehicle_keywords,
+    normalize_vehicle_keyword,
     render_vehicle_prompt_vocabulary,
 )
 
@@ -58,3 +63,43 @@ def test_prompt_vocabulary_is_rendered_from_catalog_labels_and_aliases():
     assert find_vehicle_type("之前那个车") is None
     assert find_vehicle_type("4米以上") is None
     assert find_vehicle_spec("冷链4米2") is None
+
+
+def test_keyword_catalog_has_32_stable_records_and_unique_keys():
+    records = iter_vehicle_keywords()
+    assert len(records) == 32
+    assert sum(item.entity_type == "vehicle_type" for item in records) == 25
+    assert sum(item.entity_type == "vehicle_specs" for item in records) == 7
+    keys = [(item.entity_type, keyword) for item in records for keyword in item.keywords]
+    assert len(keys) == len(set(keys))
+    assert all(item.enabled for item in records)
+
+
+@pytest.mark.parametrize(
+    ("value", "entity_type", "code"),
+    [
+        ("面包车", "vehicle_type", "medium_van"),
+        ("4.2米", "vehicle_type", "truck_4m2"),
+        ("4 米 2", "vehicle_type", "truck_4m2"),
+        ("４．２Ｍ", "vehicle_type", "truck_4m2"),
+        ("四米二", "vehicle_type", "truck_4m2"),
+        ("冷藏车", "vehicle_specs", "cold_chain"),
+        ("带尾板", "vehicle_specs", "tail_lift"),
+    ],
+)
+def test_find_vehicle_keyword_returns_canonical_record(value, entity_type, code):
+    record = find_vehicle_keyword(value, entity_type)
+    assert record is not None
+    assert record.code == code
+
+
+@pytest.mark.parametrize("value", ["小车", "大车", "货车", "卡车", "面包", "4米左右", "4米以上", "之前那个车"])
+def test_find_vehicle_keyword_does_not_guess_excluded_expression(value):
+    assert find_vehicle_keyword(value) is None
+
+
+def test_normalize_vehicle_keyword_only_changes_harmless_formatting():
+    assert normalize_vehicle_keyword("4.2 米") == "4.2米"
+    assert normalize_vehicle_keyword("4m2") == "4米2"
+    assert normalize_vehicle_keyword("四米二") == "4米2"
+    assert normalize_vehicle_keyword("4米以上") == "4米以上"

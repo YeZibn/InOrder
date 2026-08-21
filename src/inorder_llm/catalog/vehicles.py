@@ -5,8 +5,11 @@ that extraction prompts should place in ``attributes.value``; ``label`` and
 ``aliases`` are the values shown to users or recognized in natural language.
 """
 
+import re
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, Literal, Optional, Tuple
+
+VehicleEntityType = Literal["vehicle_type", "vehicle_specs"]
 
 
 @dataclass(frozen=True)
@@ -51,10 +54,30 @@ class VehicleSpec:
         }
 
 
+@dataclass(frozen=True)
+class VehicleKeyword:
+    """A high-confidence keyword that maps to exactly one catalog code."""
+
+    entity_type: VehicleEntityType
+    code: str
+    label: str
+    keywords: Tuple[str, ...]
+    enabled: bool = True
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "entity_type": self.entity_type,
+            "code": self.code,
+            "label": self.label,
+            "keywords": list(self.keywords),
+            "enabled": self.enabled,
+        }
+
+
 # Keep the tuple order stable: it is also the order used when presenting a
 # catalog in a prompt or in an admin UI.
 VEHICLE_TYPES: Tuple[VehicleType, ...] = (
-    VehicleType("four_wheel_small", "四轮小件", "small_vehicle", ("四轮小件", "小拉", "轿车")),
+    VehicleType("four_wheel_small", "四轮小件", "small_vehicle", ("四轮小件", "小拉")),
     VehicleType("micro_van", "微面", "van", ("微面",)),
     VehicleType("small_van", "小面", "van", ("小面", "小面包")),
     VehicleType("medium_van", "中面", "van", ("中面", "面包车")),
@@ -112,12 +135,88 @@ _VEHICLE_TYPES_BY_CODE = {item.code: item for item in VEHICLE_TYPES}
 _VEHICLE_SPECS_BY_CODE = {item.code: item for item in VEHICLE_SPECS}
 
 
+def _keyword_tuple(item: object) -> Tuple[str, ...]:
+    return tuple(dict.fromkeys((getattr(item, "label"), *getattr(item, "aliases"))))
+
+
+def _length_keywords(item: VehicleType) -> Tuple[str, ...]:
+    """Add only confirmed presentation variants for standard lengths."""
+
+    if item.length_cm is None:
+        return _keyword_tuple(item)
+    meters = item.length_cm / 100
+    if item.length_cm % 100 == 0:
+        numeric = f"{int(meters)}"
+        return tuple(dict.fromkeys((*_keyword_tuple(item), f"{numeric}米", f"{numeric}m")))
+    whole, decimal = divmod(item.length_cm, 100)
+    numeric = f"{whole}.{decimal}"
+    return tuple(dict.fromkeys((*_keyword_tuple(item), f"{numeric}米", f"{numeric}m", f"{whole}米{decimal}")))
+
+
+VEHICLE_KEYWORDS: Tuple[VehicleKeyword, ...] = tuple(
+    [VehicleKeyword("vehicle_type", item.code, item.label, _length_keywords(item)) for item in VEHICLE_TYPES]
+    + [VehicleKeyword("vehicle_specs", item.code, item.label, _keyword_tuple(item)) for item in VEHICLE_SPECS]
+)
+
+
+def _validate_keyword_catalog(records: Iterable[VehicleKeyword]) -> Dict[Tuple[VehicleEntityType, str], VehicleKeyword]:
+    index: Dict[Tuple[VehicleEntityType, str], VehicleKeyword] = {}
+    for record in records:
+        if not record.keywords:
+            raise ValueError(f"vehicle keyword record has no keywords: {record.code}")
+        for keyword in record.keywords:
+            key = (record.entity_type, normalize_vehicle_keyword(keyword))
+            previous = index.get(key)
+            if previous is not None and previous.code != record.code:
+                raise ValueError(f"vehicle keyword collision: {keyword!r} maps to {previous.code} and {record.code}")
+            index[key] = record
+    return index
+
+
 def _key(value: str) -> str:
     if not isinstance(value, str):
         return ""
     # Natural-language aliases commonly contain visual spacing.  Removing
     # whitespace is safe for these labels and does not introduce fuzzy match.
     return "".join(value.strip().split()).lower()
+
+
+_FULLWIDTH_TRANSLATION = str.maketrans("０１２３４５６７８９．ｍＭ", "0123456789.mM")
+_CN_DIGITS = {"零": "0", "一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9"}
+
+
+def normalize_vehicle_keyword(value: str) -> str:
+    """Normalize harmless spelling variants without resolving range semantics."""
+
+    if not isinstance(value, str):
+        return ""
+    text = value.translate(_FULLWIDTH_TRANSLATION).strip().lower()
+    text = re.sub(r"\s+", "", text).replace("m", "米")
+    # Convert the confirmed ``四米二`` style only; terms such as ``四米多``
+    # intentionally remain untouched and therefore cannot match the catalog.
+    text = re.sub(r"([一二三四五六七八九])米([一二三四五六七八九])", lambda m: f"{_CN_DIGITS[m.group(1)]}米{_CN_DIGITS[m.group(2)]}", text)
+    return text
+
+
+_VEHICLE_KEYWORD_INDEX = _validate_keyword_catalog(VEHICLE_KEYWORDS)
+
+
+def iter_vehicle_keywords() -> Tuple[VehicleKeyword, ...]:
+    return VEHICLE_KEYWORDS
+
+
+def find_vehicle_keyword(value: str, entity_type: Optional[VehicleEntityType] = None) -> Optional[VehicleKeyword]:
+    normalized = normalize_vehicle_keyword(value)
+    if not normalized:
+        return None
+    if entity_type is not None:
+        record = _VEHICLE_KEYWORD_INDEX.get((entity_type, normalized))
+        return record if record is not None and record.enabled else None
+    matches = [record for (kind, key), record in _VEHICLE_KEYWORD_INDEX.items() if key == normalized and record.enabled]
+    if not matches:
+        return None
+    codes = {record.code for record in matches}
+    return matches[0] if len(codes) == 1 else None
 
 
 def get_vehicle_type(code: str) -> Optional[VehicleType]:
@@ -197,6 +296,8 @@ def render_vehicle_prompt_vocabulary() -> str:
 __all__ = [
     "VehicleType",
     "VehicleSpec",
+    "VehicleKeyword",
+    "VehicleEntityType",
     "VEHICLE_TYPES",
     "VEHICLE_SPECS",
     "VEHICLE_TYPE_CATALOG",
@@ -208,4 +309,8 @@ __all__ = [
     "iter_vehicle_types",
     "iter_vehicle_specs",
     "render_vehicle_prompt_vocabulary",
+    "VEHICLE_KEYWORDS",
+    "normalize_vehicle_keyword",
+    "find_vehicle_keyword",
+    "iter_vehicle_keywords",
 ]
