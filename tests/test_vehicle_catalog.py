@@ -40,6 +40,13 @@ def test_vehicle_type_catalog_contains_base_types_and_all_standard_lengths():
     assert find_vehicle_type("4.2 米").code == "truck_4m2"
 
 
+def test_vehicle_master_records_have_complete_capability_ranges():
+    assert len(VEHICLE_TYPES) == 25
+    for item in VEHICLE_TYPES:
+        for value in (item.length_m, item.width_m, item.height_m, item.volume_m3, item.payload_t):
+            assert value is not None and value[0] <= value[1]
+
+
 def test_vehicle_specs_catalog_contains_confirmed_specs_and_groups():
     assert [item.code for item in VEHICLE_SPECS] == [
         "cold_chain", "enclosed", "high_rail", "flatbed", "dangerous_goods",
@@ -49,6 +56,11 @@ def test_vehicle_specs_catalog_contains_confirmed_specs_and_groups():
     assert find_vehicle_spec("带尾板").code == "tail_lift"
     assert get_vehicle_spec("high_roof").group == "structure"
     assert get_vehicle_spec("dangerous_goods").group == "transport_requirement"
+
+
+def test_special_specs_are_not_base_vehicle_types():
+    type_codes = {item.code for item in VEHICLE_TYPES}
+    assert {"cold_chain", "enclosed", "high_rail", "flatbed", "dangerous_goods", "high_roof", "tail_lift"}.isdisjoint(type_codes)
 
 
 def test_catalog_readers_are_stable_and_do_not_infer_ambiguous_values():

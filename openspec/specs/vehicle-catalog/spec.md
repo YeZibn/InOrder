@@ -8,12 +8,13 @@
 
 ### Requirement: Provide vehicle type catalog
 
-系统 SHALL 提供基础车型和标准车长的稳定 code、label、category、别名及状态信息。
+系统 SHALL 提供基础车型和标准车长的稳定 code、label、category、别名及状态信息，并提供可序列化的长宽高、载货体积和载重范围。
 
 #### Scenario: Catalog base vehicle types
 
 - **WHEN** 查询车型主数据
 - **THEN** 结果包含四轮小件、微面、小面、中面、大面、依维柯、微货、小货和中货及其稳定 code
+- **THEN** 结果同时包含每条基础车型的能力范围字段
 
 #### Scenario: Catalog length vehicle types
 
@@ -37,3 +38,15 @@
 
 - **WHEN** 用户输入“之前那个车”或“小车”
 - **THEN** 主数据不自动选择车型，交由后续澄清流程处理
+
+### Requirement: Use one vehicle data source
+
+车型目录 SHALL 从集中车型主数据表读取基础车型和特殊规格；不得在其他代码文件中维护可导致不一致的完整车型记录。现有查询接口和 canonical code SHALL 保持兼容。
+
+#### Scenario: Update a vehicle record
+- **WHEN** 修改集中主数据表中的车型能力
+- **THEN** catalog 查询返回更新后的能力，且无需同步修改另一份车型表
+
+#### Scenario: Preserve lookup compatibility
+- **WHEN** 查询“4.2米”“面包车”或“冷藏车”
+- **THEN** 返回既有对应的 canonical code 和实体类型

@@ -1,0 +1,38 @@
+{
+  "vehicle_types": [
+    {"code":"four_wheel_small","label":"四轮小件","category":"small_vehicle","aliases":["四轮小件","小拉"],"length_m":[1.8,2.4],"width_m":[1.2,1.5],"height_m":[1.1,1.4],"volume_m3":[2.4,4.0],"payload_t":[0.5,0.8]},
+    {"code":"micro_van","label":"微面","category":"van","aliases":["微面"],"length_m":[1.8,2.4],"width_m":[1.2,1.5],"height_m":[1.1,1.4],"volume_m3":[2.4,4.0],"payload_t":[0.5,0.8]},
+    {"code":"small_van","label":"小面","category":"van","aliases":["小面","小面包"],"length_m":[1.8,2.4],"width_m":[1.2,1.5],"height_m":[1.1,1.4],"volume_m3":[2.4,4.0],"payload_t":[0.5,0.8]},
+    {"code":"medium_van","label":"中面","category":"van","aliases":["中面","面包车"],"length_m":[2.4,3.4],"width_m":[1.3,1.6],"height_m":[1.2,1.5],"volume_m3":[3.7,6.5],"payload_t":[0.8,1.2]},
+    {"code":"large_van","label":"大面","category":"van","aliases":["大面"],"length_m":[3.0,3.7],"width_m":[1.5,1.8],"height_m":[1.6,1.8],"volume_m3":[7.2,9.6],"payload_t":[1.0,1.5]},
+    {"code":"iveco","label":"依维柯","category":"van","aliases":["依维柯"],"length_m":[2.4,3.7],"width_m":[1.7,1.9],"height_m":[1.5,1.9],"volume_m3":[6.1,10.7],"payload_t":[1.0,1.5]},
+    {"code":"micro_truck","label":"微货","category":"truck","aliases":["微货"],"length_m":[2.0,2.9],"width_m":[1.4,1.7],"height_m":[1.5,1.7],"volume_m3":[4.2,6.7],"payload_t":[0.8,1.2]},
+    {"code":"small_truck","label":"小货","category":"truck","aliases":["小货"],"length_m":[3.0,3.7],"width_m":[1.5,1.8],"height_m":[1.6,1.8],"volume_m3":[7.2,9.6],"payload_t":[1.0,1.5]},
+    {"code":"medium_truck","label":"中货","category":"truck","aliases":["中货"],"length_m":[3.8,4.3],"width_m":[1.8,2.4],"height_m":[1.8,2.4],"volume_m3":[12.3,19.8],"payload_t":[1.5,2.0]},
+    {"code":"truck_3m8","label":"3米8","category":"truck","aliases":["3米8","三米八","3.8米"],"length_m":[3.8,4.3],"width_m":[1.8,2.4],"height_m":[1.8,2.4],"volume_m3":[12.3,19.8],"payload_t":[1.5,2.0],"length_cm":380},
+    {"code":"truck_4m2","label":"4米2","category":"truck","aliases":["4米2","四米二","4.2米"],"length_m":[4.0,4.3],"width_m":[1.8,2.4],"height_m":[1.8,2.4],"volume_m3":[12.3,19.8],"payload_t":[1.5,2.0],"length_cm":420},
+    {"code":"truck_5m2","label":"5米2","category":"truck","aliases":["5米2","五米二","5.2米"],"length_m":[5.0,5.2],"width_m":[2.1,2.3],"height_m":[2.0,2.4],"volume_m3":[21.0,25.0],"payload_t":[2.0,3.0],"length_cm":520},
+    {"code":"truck_6m2","label":"6米2","category":"truck","aliases":["6米2","六米二","6.2米"],"length_m":[6.0,6.4],"width_m":[2.2,2.3],"height_m":[2.2,2.4],"volume_m3":[30.0,35.0],"payload_t":[3.0,5.0],"length_cm":620},
+    {"code":"truck_6m8","label":"6米8","category":"truck","aliases":["6米8","六米八","6.8米"],"length_m":[6.4,6.8],"width_m":[2.3,2.4],"height_m":[2.4,2.5],"volume_m3":[35.3,40.0],"payload_t":[6.0,8.0],"length_cm":680},
+    {"code":"truck_7m6","label":"7米6","category":"truck","aliases":["7米6","七米六","7.6米"],"length_m":[7.3,7.6],"width_m":[2.3,2.4],"height_m":[2.5,2.6],"volume_m3":[42.0,46.0],"payload_t":[8.0,10.0],"length_cm":760},
+    {"code":"truck_8m2","label":"8米2","category":"truck","aliases":["8米2","八米二","8.2米"],"length_m":[8.0,8.2],"width_m":[2.3,2.5],"height_m":[2.4,2.6],"volume_m3":[48.0,52.0],"payload_t":[10.0,12.0],"length_cm":820},
+    {"code":"truck_8m6","label":"8米6","category":"truck","aliases":["8米6","八米六","8.6米"],"length_m":[8.4,8.6],"width_m":[2.3,2.5],"height_m":[2.4,2.6],"volume_m3":[50.0,55.0],"payload_t":[10.0,13.0],"length_cm":860},
+    {"code":"truck_9m6","label":"9米6","category":"truck","aliases":["9米6","九米六","9.6米"],"length_m":[9.0,9.6],"width_m":[2.3,2.5],"height_m":[2.5,2.7],"volume_m3":[51.8,65.0],"payload_t":[10.0,15.0],"length_cm":960},
+    {"code":"truck_11m7","label":"11米7","category":"truck","aliases":["11米7","十一米七","11.7米"],"length_m":[11.0,11.7],"width_m":[2.4,2.5],"height_m":[2.5,2.7],"volume_m3":[70.0,79.0],"payload_t":[15.0,20.0],"length_cm":1170},
+    {"code":"truck_12m5","label":"12米5","category":"truck","aliases":["12米5","十二米五","12.5米"],"length_m":[12.0,12.5],"width_m":[2.4,2.5],"height_m":[2.5,2.7],"volume_m3":[78.0,85.0],"payload_t":[20.0,25.0],"length_cm":1250},
+    {"code":"truck_13m","label":"13米","category":"truck","aliases":["13米","十三米"],"length_m":[12.5,13.0],"width_m":[2.4,2.5],"height_m":[2.5,2.7],"volume_m3":[80.0,88.0],"payload_t":[18.0,25.0],"length_cm":1300},
+    {"code":"truck_13m7","label":"13米7","category":"truck","aliases":["13米7","十三米七","13.7米"],"length_m":[13.0,13.7],"width_m":[2.4,2.5],"height_m":[2.5,2.7],"volume_m3":[85.0,93.0],"payload_t":[25.0,30.0],"length_cm":1370},
+    {"code":"truck_15m","label":"15米","category":"truck","aliases":["15米","十五米"],"length_m":[14.5,15.0],"width_m":[2.5,2.5],"height_m":[2.7,2.8],"volume_m3":[100.0,110.0],"payload_t":[25.0,30.0],"length_cm":1500},
+    {"code":"truck_16m","label":"16米","category":"truck","aliases":["16米","十六米"],"length_m":[15.5,16.0],"width_m":[2.5,2.5],"height_m":[2.7,2.8],"volume_m3":[108.0,115.0],"payload_t":[28.0,31.0],"length_cm":1600},
+    {"code":"truck_17m5","label":"17米5","category":"truck","aliases":["17米5","十七米五","17.5米"],"length_m":[16.0,17.5],"width_m":[2.5,2.5],"height_m":[2.5,2.8],"volume_m3":[100.0,122.5],"payload_t":[25.0,31.0],"length_cm":1750}
+  ],
+  "vehicle_specs": [
+    {"code":"cold_chain","label":"冷链","group":"temperature_control","aliases":["冷链","冷链车","冷藏车","冷冻车","冷藏运输车"]},
+    {"code":"enclosed","label":"厢式","group":"body_type","aliases":["厢式","厢式车","封闭式","封闭式车"]},
+    {"code":"high_rail","label":"高栏","group":"body_type","aliases":["高栏","高栏车"]},
+    {"code":"flatbed","label":"平板","group":"body_type","aliases":["平板","平板车"]},
+    {"code":"dangerous_goods","label":"危险品","group":"transport_requirement","aliases":["危险品","危险品车","危化品车"]},
+    {"code":"high_roof","label":"高顶","group":"structure","aliases":["高顶","高顶车"]},
+    {"code":"tail_lift","label":"尾板","group":"loading_equipment","aliases":["尾板","带尾板","尾板车"]}
+  ]
+}
