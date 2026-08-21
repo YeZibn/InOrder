@@ -7,13 +7,15 @@ name = "inorder-llm"
 version = "0.1.0"
 description = "OpenAI-compatible LLM client foundation for InOrder"
 requires-python = ">=3.9"
-dependencies = ["openai>=2.26,<3.0", "python-dotenv>=1.0,<2.0", "langgraph>=1.0,<2.0", "langextract==1.6.0"]
+dependencies = ["openai>=2.26,<3.0", "python-dotenv>=1.0,<2.0", "langgraph>=1.0,<2.0", "langextract==1.6.0", "rapidfuzz>=3.14,<4.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 
 [project.scripts]
 llm-verify = "inorder_llm.commands.llm_verify:main"
+llm-once = "inorder_llm.commands.llm_once:main"
+llm-tools = "inorder_llm.commands.llm_tools:main"
 inorder = "inorder_llm.commands.intent_chat:main"
 
 [tool.setuptools.packages.find]

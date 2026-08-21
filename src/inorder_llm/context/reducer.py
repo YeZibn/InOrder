@@ -77,6 +77,8 @@ class OrderContextReducer:
     def apply(self, context: OrderContext, entities: Iterable[Entity]) -> OrderContext:
         result = deepcopy(context)
         for entity in normalize_entities(entities):
+            if entity.type in ("vehicle_type", "vehicle_specs") and entity.attributes.get("normalization_accepted") is False:
+                continue
             self._apply_one(result, entity)
         return result
 

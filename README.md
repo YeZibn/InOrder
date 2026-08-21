@@ -18,6 +18,24 @@ conda run -n agent python -m pip install -e '.[dev]'
 conda run -n agent llm-verify "请用一句话问候我"
 ```
 
+只想做一次 LLM 调用时，运行：
+
+```bash
+llm-once "请用一句话介绍你自己"
+```
+
+该命令会把时间和命令行工具定义一并传给模型，但只请求一次；如果模型返回工具调用，只展示调用内容，不执行工具，也不会自动发起第二次请求。
+
+### 完整响应与工具调用示例
+
+`llm-tools` 使用 Responses API，内置当前时间和受限的只读命令行工具。它会打印每一轮模型的完整响应 JSON、工具结果以及最终文本：
+
+```bash
+conda run -n agent llm-tools "请查询上海现在的时间，并告诉我"
+```
+
+命令行工具只允许 `pwd`、`ls`、`date`、`uname`、`whoami`、`echo` 和 Python 等简单命令，且不经过 shell，以免示例意外执行管道或重定向。
+
 也可以不安装命令入口：
 
 ```bash
@@ -36,7 +54,7 @@ def call_llm(state, client: LLMClient):
     return {"messages": [ChatMessage("assistant", response.text)]}
 ```
 
-当前版本支持同步文本调用和用于订单语义解析的 LangGraph 子图；不包含流式输出、工具调用或外部订单服务。
+当前基础客户端支持同步文本调用；另有 `llm-tools` 示例展示 Responses API 工具调用。订单语义解析使用 LangGraph 子图，暂不包含流式输出或外部订单服务。
 
 ## 意图规划子图
 

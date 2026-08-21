@@ -8,6 +8,7 @@ from .enums import CANONICAL_VALUES, ENUM_ALIASES
 from .models import NormalizationError
 from .time import normalize_time_entity
 from .phone import normalize_phone_entity
+from .vehicle import normalize_vehicle_entity
 
 
 _ENTITY_TO_FIELD = {
@@ -60,6 +61,8 @@ def normalize_entity(entity: Entity) -> Entity:
         return normalize_time_entity(entity)
     if entity.type == "phone":
         return normalize_phone_entity(entity)
+    if entity.type in ("vehicle_type", "vehicle_specs"):
+        return normalize_vehicle_entity(entity)
     field = _ENTITY_TO_FIELD.get(entity.type, entity.type if entity.type == "service_type" else None)
     if field is None:
         return entity
