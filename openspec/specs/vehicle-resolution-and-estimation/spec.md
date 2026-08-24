@@ -18,15 +18,15 @@
 
 ### Requirement: Estimate when no usable user vehicle exists
 
-当用户未提供车型，或用户车型原文无法唯一匹配车型主数据时，系统 SHALL 根据当前完整货物画像及车型主数据能力字段估算车型，并将来源标记为 `estimated`。
+当用户未提供车型，或用户车型原文无法唯一匹配车型主数据时，系统 SHALL 根据当前完整货物画像及车型主数据能力字段使用确定性计算估算车型，结果来源标记为 `estimated`，并最多返回三个通过计算的候选车型；不得调用 LLM 选择车型。
 
 #### Scenario: Estimate without a vehicle expression
 - **WHEN** 用户只输入货物、重量或数量等订单信息，未提供车型
-- **THEN** 系统读取货物画像并返回一个估算车型，来源为 `estimated`
+- **THEN** 系统读取货物画像和车型主数据，通过重量、体积和简化极点装载计算返回最多三个车型候选，来源为 `estimated`
 
 #### Scenario: Fall back from an ambiguous expression
 - **WHEN** 用户输入“大车”“小车”“之前那辆车”或其他无法唯一匹配的车型表达
-- **THEN** 系统不强制映射该表达，读取货物画像估算车型，并保留原始表达作为决策原因
+- **THEN** 系统不强制映射该表达，使用确定性计算估算最多三个车型，并保留原始表达作为决策原因
 
 ### Requirement: Preserve unresolved vehicle input
 
@@ -38,7 +38,7 @@
 
 ### Requirement: Return an explainable resolution result
 
-车型决策结果 SHALL 至少包含最终车型、车型特殊规格（如有）、来源和原因；来源 SHALL 为 `user_matched` 或 `estimated`。本能力 SHALL 不输出 `feasible`、`infeasible` 或其他能力校验结论。
+车型决策结果 SHALL 至少包含最终车型、车型特殊规格（如有）、来源和原因；估算结果还 SHALL 包含 0 至 3 个通过确定性计算的候选车型。来源 SHALL 为 `user_matched` 或 `estimated`。本能力 SHALL 不输出 `feasible`、`infeasible` 或其他能力校验结论。
 
 #### Scenario: Report user match source
 - **WHEN** 用户车型成功匹配主数据

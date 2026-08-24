@@ -8,7 +8,7 @@
 
 ### Requirement: Provide an order processing subgraph
 
-系统 SHALL 提供独立的订单处理子图，接收本轮用户消息、参考时间、`HistoryConversation` 和 `OrderContext`，并返回重写结果、实体列表、更新后的订单上下文及车型解析结果。
+系统 SHALL 提供独立的订单处理子图，接收本轮用户消息、参考时间、`HistoryConversation` 和 `OrderContext`，并返回重写结果、实体列表、更新后的订单上下文及车型解析结果；车型解析结果可以包含 0 至 3 个候选车型。
 
 #### Scenario: Subgraph accepts order parsing state
 
@@ -23,6 +23,10 @@
 #### Scenario: Subgraph returns vehicle resolution
 - **WHEN** 订单解析完成且货物画像或用户车型信息可用于车型决策
 - **THEN** 子图返回最终车型、特殊规格、来源和原因
+
+#### Scenario: Subgraph returns vehicle candidates
+- **WHEN** 订单解析完成且用户车型不可用或缺失
+- **THEN** 子图返回确定性计算得到的 0 至 3 个车型候选及其来源和原因
 
 #### Scenario: Subgraph does not mutate input context
 
@@ -54,7 +58,7 @@
 
 ### Requirement: Keep parsing-only boundary
 
-订单处理子图 SHALL 只负责 rewrite、grounded 实体提取、订单上下文更新、货物画像和车型解析/估算；不得调用历史订单服务、订单创建或确认工具，不得写入数据库。用户车型匹配成功时不得因货物画像而替换车型。对于提取结果中的业务 attributes，子图 SHALL 原样应用 LLM 已作出的 action 和字段决策，不得自行补全或重判。
+订单处理子图 SHALL 只负责 rewrite、grounded 实体提取、订单上下文更新、货物画像和确定性车型解析/估算；不得调用历史订单服务、订单创建或确认工具，不得写入数据库。用户车型匹配成功时不得因货物画像而替换车型。对于提取结果中的业务 attributes，子图 SHALL 原样应用 LLM 已作出的 action 和字段决策，不得自行补全或重判。
 
 #### Scenario: Parsing applies mapped grounded entities in memory only
 
@@ -89,6 +93,6 @@
 - **WHEN** rewrite 成功但 extract 模型返回非法结构
 - **THEN** 子图调用失败并暴露结构化错误，不产生可被误用的部分结果
 
-#### Scenario: Invalid vehicle estimation output
-- **WHEN** 车型估算模型返回非法结构或未知车型 code
-- **THEN** 子图调用失败，不写入非法车型结果
+#### Scenario: Vehicle estimation has no LLM selection call
+- **WHEN** 子图进入车型估算阶段
+- **THEN** 车型结果由车型主数据和确定性装载计算生成，不调用车型选择 LLM

@@ -108,6 +108,8 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
             lines.append("车型来源：" + str(resolution.get("source", "")))
             if resolution.get("reason"):
                 lines.append("车型原因：" + str(resolution["reason"]))
+            for index, candidate in enumerate(resolution.get("candidates", []), 1):
+                lines.append(f"候选车型{index}：{candidate.get('vehicle_type')}（余量 {candidate.get('volume_slack_m3')}m³）")
         for entity in result.get("entities", []):
             item = _data(entity)
             lines.append("Entity：" + json.dumps(item, ensure_ascii=False))
