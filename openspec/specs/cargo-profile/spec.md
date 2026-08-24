@@ -92,9 +92,9 @@
 
 ### Requirement: Keep profile generation separate from vehicle selection
 
-画像生成 SHALL 只输出简化后的货物属性和汇总约束，不输出车型推荐、车辆 code、装箱坐标或可行车型结论。
+货物画像生成 SHALL 继续只输出货物属性和汇总约束，不直接选择车型；车型解析/估算阶段可以读取当前完整货物画像及汇总结果，但不得要求货物画像阶段输出车型字段。画像输出不得包含车型推荐、车辆 code、装箱坐标或能力校验结论。
 
-#### Scenario: Profile does not select vehicle
+#### Scenario: Profile remains vehicle-agnostic
 
 - **WHEN** 系统完成货物画像
-- **THEN** 输出不包含 `vehicle_type`、`vehicle_specs`、`recommended_vehicle` 或其他车辆选择字段
+- **THEN** 画像输出不包含 `vehicle_type`、`vehicle_specs`、`recommended_vehicle` 或能力校验结论，车型估算在后续阶段读取画像

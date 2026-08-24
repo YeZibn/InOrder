@@ -6,6 +6,7 @@ from ...context.models import HistoryConversation, OrderContext
 from ...extract.models import Entity
 from ...rewrite.models import RewriteResult
 from ...cargo_profile.models import CargoProfileResult
+from ...vehicle_resolution.models import VehicleResolutionResult
 
 
 class RewriteModel(Protocol):
@@ -32,4 +33,14 @@ class CargoProfileModel(Protocol):
         ...
 
 
-__all__ = ["RewriteModel", "EntityExtractorModel", "CargoProfileModel"]
+class VehicleResolutionModel(Protocol):
+    def resolve(
+        self,
+        cargo_profiles: Sequence[Mapping[str, Any]],
+        cargo_profile_summary: Mapping[str, Any] | None,
+        raw_vehicle_text: str | None = None,
+    ) -> VehicleResolutionResult:
+        ...
+
+
+__all__ = ["RewriteModel", "EntityExtractorModel", "CargoProfileModel", "VehicleResolutionModel"]

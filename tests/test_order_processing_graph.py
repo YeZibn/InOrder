@@ -9,6 +9,7 @@ from inorder_llm.extract.models import Entity
 from inorder_llm.graph.order import build_order_processing_graph
 from inorder_llm.intent.resolver import StructuredIntentError
 from inorder_llm.rewrite.models import RewriteResult
+from inorder_llm.vehicle_resolution import VehicleResolutionResult
 
 
 class FakeRewriteModel:
@@ -44,6 +45,16 @@ class FakeCargoProfile:
         self.calls.append(deepcopy(cargo))
         if self.error:
             raise self.error
+        return self.result
+
+
+class FakeVehicleResolution:
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    def resolve(self, cargo_profiles, summary, raw_vehicle_text=None):
+        self.calls.append((deepcopy(cargo_profiles), deepcopy(summary), raw_vehicle_text))
         return self.result
 
 
@@ -92,6 +103,28 @@ def test_order_processing_graph_rewrites_then_extracts_incremental_text():
     assert len(extractor.calls) == 1
     assert extractor.calls[0][0] == "再加一吨苹果"
     assert extractor.calls[0][1] == "2026-08-17 10:00"
+
+
+def test_matched_user_vehicle_short_circuits_estimation():
+    rewrite = FakeRewriteModel(RewriteResult("设置4米2", "设置4米2"))
+    extractor = FakeExtractor([Entity("vehicle_type", "set", {"value": "4米2"}, "4米2")])
+    estimator = FakeVehicleResolution(VehicleResolutionResult("truck_5m2", [], "estimated", "不应调用"))
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(_state())
+    assert result["vehicle_resolution"].vehicle_type == "truck_4m2"
+    assert result["vehicle_resolution"].source == "user_matched"
+    assert estimator.calls == []
+
+
+def test_unmatched_vehicle_falls_back_to_estimation():
+    rewrite = FakeRewriteModel(RewriteResult("设置大车", "设置大车"))
+    extractor = FakeExtractor([Entity("vehicle_type", "set", {}, "大车")])
+    estimator = FakeVehicleResolution(VehicleResolutionResult("truck_6m8", [], "estimated", "大车无法唯一匹配，依据货物画像估算。"))
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(_state())
+    assert result["vehicle_resolution"].vehicle_type == "truck_6m8"
+    assert result["vehicle_resolution"].source == "estimated"
+    assert estimator.calls[0][2] == "大车"
+    assert result["order_context"].vehicle_type == "truck_6m8"
+    assert result["order_context"].vehicle_source == "estimated"
 
 
 def test_ambiguous_rewrite_still_calls_extractor():

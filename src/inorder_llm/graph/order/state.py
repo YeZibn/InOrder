@@ -5,6 +5,7 @@ from typing import List, Optional, TypedDict
 from ...context.models import HistoryConversation, OrderContext
 from ...extract.models import Entity
 from ...rewrite.models import RewriteResult
+from ...vehicle_resolution.models import VehicleResolutionResult
 
 
 class OrderGraphState(TypedDict, total=False):
@@ -17,6 +18,7 @@ class OrderGraphState(TypedDict, total=False):
     cargo_profile_updated: bool
     rewrite_result: RewriteResult
     entities: List[Entity]
+    vehicle_resolution: VehicleResolutionResult
 
 
 __all__ = ["OrderGraphState"]

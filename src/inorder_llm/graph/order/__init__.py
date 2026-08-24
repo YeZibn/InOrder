@@ -7,6 +7,7 @@ from .nodes import (
     ExtractNode,
     FinalizeNode,
     RewriteNode,
+    VehicleResolutionNode,
 )
 from .state import OrderGraphState
 
@@ -18,5 +19,6 @@ __all__ = [
     "ExtractNode",
     "ContextUpdateNode",
     "CargoProfileNode",
+    "VehicleResolutionNode",
     "FinalizeNode",
 ]

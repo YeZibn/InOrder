@@ -18,6 +18,7 @@ def test_empty_order_context_is_json_compatible():
     assert data["pickup_location"] is None
     assert data["cargo"] == []
     assert data["vehicle_specs"] == []
+    assert data["vehicle_source"] is None
     assert data["cargo_profiles"] == []
     assert data["cargo_profile_summary"] is None
 

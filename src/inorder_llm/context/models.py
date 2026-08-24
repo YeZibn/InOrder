@@ -81,6 +81,7 @@ class OrderContext:
     cargo_profile_summary: Optional[Dict[str, Any]] = None
     vehicle_type: Optional[str] = None
     vehicle_specs: List[str] = field(default_factory=list)
+    vehicle_source: Optional[str] = None
     delivery_time: Optional[Mapping[str, Any]] = None
     follow_car_number: Optional[int] = None
     oneself_follow_flag: Optional[int] = None

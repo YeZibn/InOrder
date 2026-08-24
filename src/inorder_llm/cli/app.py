@@ -100,6 +100,14 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
         lines.append("订单上下文：" + ("已更新" if result.get("order_context_updated") else "未更新"))
         if result.get("cargo_profile_updated"):
             lines.append("货物画像：已重建")
+        resolution = _data(result.get("vehicle_resolution"))
+        if resolution:
+            lines.append("车型：" + str(resolution.get("vehicle_type", "")))
+            if resolution.get("vehicle_specs"):
+                lines.append("车型规格：" + "、".join(resolution["vehicle_specs"]))
+            lines.append("车型来源：" + str(resolution.get("source", "")))
+            if resolution.get("reason"):
+                lines.append("车型原因：" + str(resolution["reason"]))
         for entity in result.get("entities", []):
             item = _data(entity)
             lines.append("Entity：" + json.dumps(item, ensure_ascii=False))

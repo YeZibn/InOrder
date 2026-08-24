@@ -48,6 +48,7 @@ class OrderChainRunner:
                 "entity_count": len(result.get("entities", ())),
                 "order_context_updated": bool(result.get("order_context_updated")),
                 "cargo_profile_updated": bool(result.get("cargo_profile_updated")),
+                "vehicle_resolution_completed": result.get("vehicle_resolution") is not None,
             }
         )
         return result

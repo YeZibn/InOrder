@@ -5,6 +5,9 @@ from typing import Any, Dict, Literal
 from ...graph.base import BaseNode
 from ...context import OrderContextReducer
 from .protocols import CargoProfileModel, EntityExtractorModel, RewriteModel
+from .protocols import VehicleResolutionModel
+from ...normalization import normalize_entities
+from ...vehicle_resolution.models import VehicleResolutionResult
 from .state import OrderGraphState
 
 
@@ -87,7 +90,54 @@ class FinalizeNode(BaseNode[OrderGraphState]):
             "order_context": state.get("order_context"),
             "order_context_updated": state.get("order_context_updated", False),
             "cargo_profile_updated": state.get("cargo_profile_updated", False),
+            "vehicle_resolution": state.get("vehicle_resolution"),
         }
+
+
+class VehicleResolutionNode(BaseNode[OrderGraphState]):
+    name = "vehicle_resolution"
+
+    def __init__(self, model: VehicleResolutionModel):
+        self.model = model
+
+    def run(self, state: OrderGraphState) -> Dict[str, Any]:
+        context = state["order_context"]
+        entities = state.get("entities", [])
+        vehicle_entities = [entity for entity in normalize_entities(entities) if entity.type in ("vehicle_type", "vehicle_specs")]
+        unresolved = [entity for entity in vehicle_entities if entity.attributes.get("normalization_accepted") is False]
+        matched_specs = [
+            entity.attributes["value"]
+            for entity in vehicle_entities
+            if entity.type == "vehicle_specs"
+            and entity.attributes.get("normalization_accepted") is not False
+            and isinstance(entity.attributes.get("value"), str)
+        ]
+        has_matched_user_vehicle = bool(context.vehicle_type) and not unresolved and (
+            bool(vehicle_entities) or context.vehicle_source in (None, "user_matched")
+        )
+        if has_matched_user_vehicle:
+            from ...catalog import get_vehicle_type
+            specs = list(context.vehicle_specs)
+            type_record = get_vehicle_type(context.vehicle_type)
+            label = type_record.label if type_record else context.vehicle_type
+            return {
+                "vehicle_resolution": VehicleResolutionResult(
+                    context.vehicle_type, specs, "user_matched",
+                    f"采用用户指定车型：{label}",
+                )
+            }
+        raw_text = unresolved[0].extraction_text if unresolved else None
+        result = self.model.resolve(context.cargo_profiles, context.cargo_profile_summary, raw_text)
+        if matched_specs:
+            merged_specs = list(dict.fromkeys([*result.vehicle_specs, *matched_specs]))
+            result = VehicleResolutionResult(result.vehicle_type, merged_specs, result.source, result.reason, result.raw_vehicle_text)
+        updated = context
+        from copy import deepcopy
+        updated = deepcopy(context)
+        updated.vehicle_type = result.vehicle_type
+        updated.vehicle_specs = list(result.vehicle_specs)
+        updated.vehicle_source = result.source
+        return {"vehicle_resolution": result, "order_context": updated, "order_context_updated": updated != context}
 
 
 __all__ = [
@@ -95,5 +145,6 @@ __all__ = [
     "ExtractNode",
     "ContextUpdateNode",
     "CargoProfileNode",
+    "VehicleResolutionNode",
     "FinalizeNode",
 ]

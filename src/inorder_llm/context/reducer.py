@@ -102,6 +102,7 @@ class OrderContextReducer:
             # mistaken for canonical context values.
             record = find_vehicle_spec(value)
             if record is not None:
+                context.vehicle_source = "user_matched"
                 self._list(context, "vehicle_specs", record.code, entity)
         elif entity.type == "remark":
             self._remark(context, entity)
@@ -112,6 +113,7 @@ class OrderContextReducer:
                 if record is None:
                     return
                 value = record.code
+                context.vehicle_source = "user_matched"
             self._single(context, _SCALAR_TYPES[entity.type], value, entity)
         else:
             raise ContextReductionError("unsupported entity type: " + entity.type)
