@@ -1,6 +1,7 @@
 from ..infrastructure.llm import LLMClient, load_config
 from ..graph.intent import build_intent_graph
 from ..graph.order import build_order_processing_graph
+from ..graph.main import build_main_graph
 from ..intent.resolver import LLMIntentModel
 from ..rewrite import OrderRewriteModel
 from ..extract import EntityExtractor, LangExtractEntityExtractor
@@ -24,7 +25,8 @@ def main(argv=None):
         else EntityExtractor(client)
     )
     order_graph = build_order_processing_graph(OrderRewriteModel(client), extractor, CargoProfileResolver(client), VehicleResolutionResolver(client))
-    IntentCli(intent_graph=intent_graph, order_graph=order_graph).run()
+    main_graph = build_main_graph(intent_graph, order_graph)
+    IntentCli(intent_graph=intent_graph, order_graph=order_graph, main_graph=main_graph).run()
     return 0
 
 __all__ = ["main"]

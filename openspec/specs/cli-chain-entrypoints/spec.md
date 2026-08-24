@@ -138,3 +138,15 @@ CLI SHALL 在启用流式配置时按增量顺序显示当前 LLM 内容，并�
 #### Scenario: Streaming disabled
 - **WHEN** 流式配置未启用
 - **THEN** CLI 使用现有非流式输出路径，不改变链路选择和业务结果格式
+
+### Requirement: Route full chain through parent graph
+
+CLI SHALL 将 full 链路路由到 MainGraph；intent 和 order 链路 SHALL 继续直接调用各自子图。
+
+#### Scenario: Full chain invokes parent graph
+- **WHEN** 当前链路为 `full` 且用户输入普通消息
+- **THEN** CLI 调用 MainGraph，由父图编排意图和订单子图
+
+#### Scenario: Independent child chain remains available
+- **WHEN** 当前链路为 `intent` 或 `order`
+- **THEN** CLI 直接调用对应子图，不要求经过 MainGraph

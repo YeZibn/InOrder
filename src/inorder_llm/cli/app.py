@@ -141,14 +141,18 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
 
 
 class IntentCli:
-    def __init__(self, graph=None, intent_graph=None, order_graph=None, full_runner=None,
+    def __init__(self, graph=None, intent_graph=None, order_graph=None, full_runner=None, main_graph=None,
                  input_fn: Callable[[str], str] = input, output_fn: Callable[[str], None] = print):
         self.input, self.output = input_fn, output_fn
         self.session, self.parser = CliSession(), CommandParser()
         if intent_graph is None: intent_graph = graph
         self.intent_runner = IntentChainRunner(intent_graph) if intent_graph is not None else None
         self.order_runner = OrderChainRunner(order_graph) if order_graph is not None else None
-        self.full_runner = full_runner or (FullChainRunner(self.intent_runner, self.order_runner) if self.intent_runner else None)
+        self.full_runner = full_runner or (FullChainRunner(self.intent_runner, self.order_runner, main_graph=main_graph) if self.intent_runner else None)
+
+    def run_with_main_graph(self, main_graph):
+        self.full_runner = FullChainRunner(self.intent_runner, self.order_runner, main_graph=main_graph)
+        return self.run()
 
     def switch_chain(self, chain):
         if chain not in CHAINS: return "非法链路，可选：" + ", ".join(CHAINS)

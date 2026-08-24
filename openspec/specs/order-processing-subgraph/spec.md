@@ -96,3 +96,15 @@
 #### Scenario: Vehicle estimation has no LLM selection call
 - **WHEN** 子图进入车型估算阶段
 - **THEN** 车型结果由车型主数据和确定性装载计算生成，不调用车型选择 LLM
+
+### Requirement: Parent graph embeddable order subgraph
+
+订单处理图 SHALL 可独立调用，也 SHALL 能作为 MainGraph 的子图挂载；接收父图传入的消息、参考时间、历史对话和订单上下文，并返回可汇总的订单处理结果。
+
+#### Scenario: Parent graph passes order context
+- **WHEN** MainGraph 路由到订单子图
+- **THEN** 订单子图接收父图传入的历史对话、订单上下文和参考时间
+
+#### Scenario: Order subgraph output returns to parent
+- **WHEN** 订单子图完成解析
+- **THEN** 父图可以取得 rewrite、entities、OrderContext 和车型结果并汇总返回

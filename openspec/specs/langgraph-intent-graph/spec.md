@@ -53,3 +53,15 @@
 #### Scenario: No business side effect
 - **WHEN** 图识别出任意订单子意图
 - **THEN** 图只返回识别状态，不产生业务数据读写或外部业务调用
+
+### Requirement: Parent graph embeddable intent subgraph
+
+意图图 SHALL 可独立调用，也 SHALL 能作为 MainGraph 的子图挂载；输出必须包含父图路由所需的 `main_intent` 和经过校验的 `intent_plan`。
+
+#### Scenario: Parent graph consumes intent output
+- **WHEN** MainGraph 调用意图图
+- **THEN** 意图图输出 `main_intent` 和 `intent_plan` 供父图路由
+
+#### Scenario: Recognition-only boundary is preserved
+- **WHEN** 意图图独立或被父图调用
+- **THEN** 意图图只执行意图识别和计划校验，不查询或修改真实订单

@@ -80,12 +80,18 @@ plan = result["intent_plan"]
 ```text
 graph/
 ├── base.py
+├── main/
+│   ├── state.py
+│   ├── routing.py
+│   └── graph.py
 └── intent/
     ├── state.py
     ├── routing.py
     ├── graph.py
     └── nodes/
 ```
+
+`main` 是父图，`intent` 和 `order` 是可独立运行或被父图挂载的子图。
 
 `BaseNode` 只统一节点调用边界，`BaseGraph` 只统一 build/compile；底层仍直接使用官方 LangGraph `StateGraph`。图中 `main_intent` 和 `sub_intent` 是两个独立节点；只有主意图为 `order` 时才会进入子意图节点。当 `order` 未识别出具体子意图时，计划会标记 `needs_clarification`。
 
@@ -121,7 +127,7 @@ order   下单链路：只运行订单处理子图
 /exit               退出
 ```
 
-`full` 链路识别为 `order` 时会继续进入 rewrite → clarification → extract → context update 订单处理子图；`intent` 和 `order` 可用于单独调试对应链路。当前 CLI 只做意图识别、订单语义解析和内存订单上下文更新，不执行归一化、历史订单查询、草稿修改、创建订单、确认下单或真实问答。
+`full` 链路现在通过 LangGraph MainGraph 编排 IntentGraph 和 OrderProcessingGraph：识别为 `order` 时进入 rewrite → extract → context update → cargo profile → vehicle resolution 订单处理子图；`intent` 和 `order` 可用于单独调试对应子图。当前 CLI 只做意图识别、订单语义解析和内存订单上下文更新，不执行历史订单查询、草稿修改、创建订单、确认下单或真实问答。
 
 普通消息成功处理后，CLI 会在当前内存会话中追加一条精简的 assistant 处理摘要；不会保存完整实体 JSON、订单上下文、原始 LLM content 或错误堆栈。`/context` 和 `/conversation` 是只读查看命令，不会调用 graph 或修改会话。
 
