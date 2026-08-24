@@ -70,16 +70,21 @@ class LangExtractEntityExtractor:
             import langextract as lx
             from langextract.core.tokenizer import UnicodeTokenizer
             from langextract.prompt_validation import PromptValidationLevel
+            from .responses_provider import ResponsesLanguageModel
         except ImportError as exc:
             raise StructuredIntentError("langextract is not installed") from exc
+        model = None
+        if self.config.api_mode == "responses":
+            model = ResponsesLanguageModel(model_id=self.config.model, api_key=self.config.api_key, base_url=self.config.base_url, reasoning_effort=self.config.reasoning_effort)
         return lx.extract(
             text,
             prompt_description=LANGEXTRACT_ORDER_PROMPT_DESCRIPTION,
             examples=build_langextract_order_examples(),
-            model_id=self.config.model,
-            api_key=self.config.api_key,
-            model_url=self.config.base_url,
-            language_model_params={"reasoning_effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
+            model=model,
+            model_id=None if model is not None else self.config.model,
+            api_key=None if model is not None else self.config.api_key,
+            model_url=None if model is not None else self.config.base_url,
+            language_model_params={"reasoning_effort": self.config.reasoning_effort} if model is None and self.config.reasoning_effort else None,
             extraction_passes=1,
             tokenizer=UnicodeTokenizer(),
             prompt_validation_level=PromptValidationLevel.ERROR,

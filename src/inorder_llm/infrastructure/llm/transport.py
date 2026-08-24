@@ -4,13 +4,13 @@ from .config import LLMConfig
 from .models import ChatMessage
 
 
-class ChatTransport(Protocol):
+class ResponsesTransport(Protocol):
     def complete(self, messages: Sequence[ChatMessage], config: LLMConfig) -> Any:
         ...
 
 
 class OpenAITransport:
-    """Thin adapter around the OpenAI-compatible SDK."""
+    """Configurable OpenAI-compatible transport."""
 
     def __init__(self, config: LLMConfig):
         try:
@@ -20,7 +20,12 @@ class OpenAITransport:
         self._client = OpenAI(api_key=config.api_key, base_url=config.base_url, timeout=config.timeout)
 
     def complete(self, messages, config):
-        request = {"model": config.model, "messages": [{"role": m.role, "content": m.content} for m in messages]}
+        if config.api_mode == "chat_completions":
+            request = {"model": config.model, "messages": [{"role": m.role, "content": m.content} for m in messages]}
+            if config.reasoning_effort is not None:
+                request["reasoning_effort"] = config.reasoning_effort
+            return self._client.chat.completions.create(**request)
+        request = {"model": config.model, "input": [{"role": m.role, "content": m.content} for m in messages]}
         if config.reasoning_effort is not None:
-            request["reasoning_effort"] = config.reasoning_effort
-        return self._client.chat.completions.create(**request)
+            request["reasoning"] = {"effort": config.reasoning_effort}
+        return self._client.responses.create(**request)

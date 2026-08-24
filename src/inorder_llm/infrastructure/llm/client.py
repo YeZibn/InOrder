@@ -4,14 +4,14 @@ from typing import Any, Callable, Optional, Sequence
 from .config import LLMConfig
 from .errors import AuthenticationError, InvalidRequestError, RateLimitError, TimeoutError, UpstreamError
 from .models import ChatMessage, LLMResponse, Usage
-from .transport import ChatTransport, OpenAITransport
+from .transport import OpenAITransport, ResponsesTransport
 
 
 class LLMClient:
     def __init__(
         self,
         config: LLMConfig,
-        transport: ChatTransport = None,
+        transport: ResponsesTransport = None,
         sleep=time.sleep,
         on_content: Optional[Callable[[str], None]] = None,
     ):
@@ -42,14 +42,31 @@ class LLMClient:
         raise AssertionError("unreachable")
 
     def _normalize(self, raw: Any) -> LLMResponse:
-        message = raw.choices[0].message
+        if hasattr(raw, "choices"):
+            message = raw.choices[0].message
+            usage_raw = getattr(raw, "usage", None)
+            usage = None if usage_raw is None else Usage(
+                getattr(usage_raw, "prompt_tokens", None),
+                getattr(usage_raw, "completion_tokens", None),
+                getattr(usage_raw, "total_tokens", None),
+            )
+            return LLMResponse(
+                getattr(message, "content", "") or "",
+                getattr(raw, "model", self.config.model),
+                usage,
+                {"id": getattr(raw, "id", None), "finish_reason": getattr(raw.choices[0], "finish_reason", None), "refusal": getattr(message, "refusal", None)},
+            )
         usage_raw = getattr(raw, "usage", None)
-        usage = None if usage_raw is None else Usage(getattr(usage_raw, "prompt_tokens", None), getattr(usage_raw, "completion_tokens", None), getattr(usage_raw, "total_tokens", None))
-        content = getattr(message, "content", "") or ""
+        usage = None if usage_raw is None else Usage(
+            getattr(usage_raw, "input_tokens", None),
+            getattr(usage_raw, "output_tokens", None),
+            getattr(usage_raw, "total_tokens", None),
+        )
+        content = getattr(raw, "output_text", "") or ""
         metadata = {
             "id": getattr(raw, "id", None),
-            "finish_reason": getattr(raw.choices[0], "finish_reason", None),
-            "refusal": getattr(message, "refusal", None),
+            "status": getattr(raw, "status", None),
+            "incomplete_details": getattr(raw, "incomplete_details", None),
         }
         return LLMResponse(content, getattr(raw, "model", self.config.model), usage, metadata)
 

@@ -19,6 +19,7 @@ class LLMConfig:
     backoff_seconds: float = 0.5
     reasoning_effort: str = None
     extractor_backend: str = "langextract"
+    api_mode: str = "chat_completions"
 
 
 def load_config(environ=None) -> LLMConfig:
@@ -42,6 +43,9 @@ def load_config(environ=None) -> LLMConfig:
     extractor_backend = env.get("EXTRACTOR_BACKEND", "langextract")
     if extractor_backend not in ("langextract", "json"):
         raise ConfigurationError("EXTRACTOR_BACKEND must be one of: langextract, json")
+    api_mode = env.get("LLM_API_MODE", "chat_completions").strip().lower()
+    if api_mode not in ("chat_completions", "responses"):
+        raise ConfigurationError("LLM_API_MODE must be one of: chat_completions, responses")
     return LLMConfig(
         env["LLM_API_KEY"],
         env["LLM_BASE_URL"],
@@ -51,4 +55,5 @@ def load_config(environ=None) -> LLMConfig:
         backoff,
         reasoning_effort,
         extractor_backend,
+        api_mode,
     )

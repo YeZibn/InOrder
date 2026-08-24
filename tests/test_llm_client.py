@@ -9,13 +9,13 @@ from inorder_llm.infrastructure.llm.models import ChatMessage
 
 
 def config(**kwargs):
-    values = dict(api_key="secret", base_url="https://example.test/v1", model="demo", max_retries=2, backoff_seconds=0)
+    values = dict(api_key="secret", base_url="https://example.test/v1", model="demo", max_retries=2, backoff_seconds=0, api_mode="responses")
     values.update(kwargs)
     return LLMConfig(**values)
 
 
 def response():
-    return SimpleNamespace(model="demo", id="r1", choices=[SimpleNamespace(message=SimpleNamespace(content="hello"))], usage=SimpleNamespace(prompt_tokens=2, completion_tokens=3, total_tokens=5))
+    return SimpleNamespace(model="demo", id="r1", output_text="hello", status="completed", usage=SimpleNamespace(input_tokens=2, output_tokens=3, total_tokens=5))
 
 
 class FakeTransport:
@@ -37,6 +37,10 @@ def test_load_config_and_missing_values():
     assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_REASONING_EFFORT": "high"}).reasoning_effort == "high"
     with pytest.raises(ConfigurationError):
         load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_REASONING_EFFORT": "max"})
+    assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m"}).api_mode == "chat_completions"
+    assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_API_MODE": "responses"}).api_mode == "responses"
+    with pytest.raises(ConfigurationError):
+        load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_API_MODE": "other"})
 
 
 def test_success_normalizes_response_and_messages():
@@ -56,11 +60,10 @@ def test_content_observer_receives_each_normalized_response():
 
 def test_normalized_response_exposes_finish_reason_and_refusal():
     raw = response()
-    raw.choices[0].finish_reason = "stop"
-    raw.choices[0].message.refusal = None
+    raw.incomplete_details = None
     result = LLMClient(config(), transport=FakeTransport(raw)).chat([ChatMessage("user", "hi")])
-    assert result.metadata["finish_reason"] == "stop"
-    assert result.metadata["refusal"] is None
+    assert result.metadata["status"] == "completed"
+    assert result.metadata["incomplete_details"] is None
 
 
 def test_empty_messages_are_rejected_without_transport_call():

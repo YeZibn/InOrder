@@ -8,7 +8,7 @@
 
 ### Requirement: Configurable model access
 
-系统 SHALL 从运行时配置中读取模型服务的 API key、base URL 和模型标识，并支持可选的 reasoning effort。缺少必需配置或 reasoning effort 非 `low`、`medium`、`high` 时，系统 SHALL 拒绝发起请求并返回明确的配置错误。
+系统 SHALL 从运行时配置中读取模型服务的 API key、base URL、模型标识和可选的 `LLM_API_MODE`；接口模式 SHALL 为 `chat_completions` 或 `responses`，未配置时默认为 `chat_completions`。系统 SHALL 支持可选的 reasoning effort；缺少必需配置或配置值非法时 SHALL 拒绝发起请求并返回明确的配置错误。
 
 #### Scenario: Valid configuration
 - **WHEN** API key、base URL 和模型标识均已配置
@@ -26,9 +26,17 @@
 - **WHEN** reasoning effort 配置为其他值
 - **THEN** 客户端不发起上游请求并返回配置错误
 
+#### Scenario: Select API mode
+- **WHEN** `LLM_API_MODE` 设置为 `chat_completions` 或 `responses`
+- **THEN** 客户端使用对应的上游接口；未设置时使用 `chat_completions`
+
+#### Scenario: Invalid API mode
+- **WHEN** `LLM_API_MODE` 设置为其他值
+- **THEN** 客户端不发起上游请求并返回配置错误
+
 ### Requirement: Text chat completion
 
-系统 SHALL 接受包含角色和文本内容的消息列表，并返回统一结构的文本结果；调用方无需依赖供应商特定的响应对象。
+系统 SHALL 接受包含角色和文本内容的消息列表，并根据 API 模式返回统一结构的文本结果；调用方无需依赖供应商特定的响应对象。
 
 #### Scenario: Successful completion
 - **WHEN** 调用方提供有效消息列表且上游返回成功
@@ -40,7 +48,7 @@
 
 #### Scenario: Reasoning effort is forwarded when configured
 - **WHEN** 调用方使用已配置 reasoning effort 的客户端发送消息
-- **THEN** 客户端向上游请求传递对应的 `reasoning_effort` 参数
+- **THEN** 客户端向所选接口传递对应格式的 reasoning effort 参数
 
 #### Scenario: Reasoning effort is omitted when unset
 - **WHEN** 调用方未配置 reasoning effort
