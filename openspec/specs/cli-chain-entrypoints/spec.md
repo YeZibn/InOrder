@@ -126,3 +126,15 @@ CLI SHALL 保留 `/intent` 作为切换到 `intent` 链路的兼容命令，并 
 
 - **WHEN** 任一链路完成处理
 - **THEN** CLI 输出当前链路及解析状态，并明确未执行真实订单业务
+
+### Requirement: Display streaming LLM output
+
+CLI SHALL 在启用流式配置时按增量顺序显示当前 LLM 内容，并在模型调用完成后继续输出原有结构化链路结果；关闭流式配置时 SHALL 保持一次性输出行为。
+
+#### Scenario: Stream within selected chain
+- **WHEN** full、intent 或 order 链路触发 LLM 调用且流式展示已启用
+- **THEN** CLI 实时显示增量内容，并继续输出对应链路的结构化结果
+
+#### Scenario: Streaming disabled
+- **WHEN** 流式配置未启用
+- **THEN** CLI 使用现有非流式输出路径，不改变链路选择和业务结果格式

@@ -93,3 +93,27 @@
 #### Scenario: Run verification without configuration
 - **WHEN** 用户未配置必需环境变量运行验证入口
 - **THEN** 入口提示缺少配置并以非零状态退出
+
+### Requirement: Streaming LLM calls
+
+LLM 客户端 SHALL 根据配置调用 Chat Completions 或 Responses，并将供应商的流式响应归一化为增量文本和完整 `LLMResponse`；既有完整调用入口 SHALL 保持兼容。
+
+#### Scenario: Configured Chat Completions streaming call
+- **WHEN** API 模式为 `chat_completions` 且调用方请求流式调用
+- **THEN** 客户端调用 Chat Completions，使用 `reasoning_effort` 参数格式，并按顺序交付 `delta.content`
+
+#### Scenario: Configured Responses streaming call
+- **WHEN** API 模式为 `responses` 且调用方请求流式调用
+- **THEN** 客户端调用 Responses，使用 `reasoning.effort` 参数格式，并按顺序交付文本增量事件
+
+#### Scenario: Streaming complete result
+- **WHEN** 流式响应正常完成
+- **THEN** 客户端返回所有增量拼接后的完整 `LLMResponse`，供结构化 resolver 使用
+
+#### Scenario: Streaming retry boundary
+- **WHEN** 首个文本增量到达前发生可重试的上游错误
+- **THEN** 客户端按现有重试策略重试；如果已经交付文本增量后发生错误，则终止本次请求且不得重复重试
+
+#### Scenario: Structured response prefix
+- **WHEN** 流式完整文本开头包含 BOM 或零宽格式字符
+- **THEN** 结构化 JSON 解析清理开头字符并保留正文内容

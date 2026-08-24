@@ -57,6 +57,11 @@ def test_classify_main_intent_sends_system_then_user_message():
     assert result["main_intent"] == "qa"
 
 
+def test_main_intent_accepts_invisible_stream_prefix():
+    client = FakeLLMClient('\u200b{"main_intent":"qa","confidence":0.8}')
+    assert LLMIntentModel(client).classify_main_intent("你好")["main_intent"] == "qa"
+
+
 def test_extract_sub_intents_sends_system_then_user_message_and_parses_items():
     payload = {"sub_intents": [{"id": "step_1", "name": "create_order", "arguments": {"cargo": "钢材"}}]}
     client = FakeLLMClient(json.dumps(payload))

@@ -6,6 +6,7 @@ from numbers import Real
 from typing import Any, Mapping, Sequence
 
 from ..infrastructure.llm import ChatMessage, LLMClient
+from ..infrastructure.llm.text import strip_json_prefix
 from ..intent.resolver import StructuredIntentError
 from .models import CargoProfile, CargoProfileResult, CargoProfileSummary
 
@@ -128,7 +129,7 @@ def parse_cargo_profile_result(value: Mapping[str, Any]) -> CargoProfileResult:
 
 def parse_cargo_profile_from_text(text: str) -> CargoProfileResult:
     try:
-        value = json.loads(text)
+        value = json.loads(strip_json_prefix(text))
     except (TypeError, ValueError) as exc:
         raise StructuredIntentError("LLM returned invalid cargo profile JSON") from exc
     if not isinstance(value, dict):

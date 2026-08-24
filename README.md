@@ -16,6 +16,8 @@ conda run -n agent python -m pip install -e '.[dev]'
 
 `LLM_API_MODE` 可设置为 `chat_completions` 或 `responses`，默认使用 `chat_completions`。`LLM_BASE_URL` 始终填写服务根路径，例如 `https://example.com/v1`，不要把具体 endpoint 写入其中。
 
+`LLM_STREAMING` 控制 CLI 是否实时输出 LLM 增量内容，设置为 `true`、`1`、`yes` 或 `on` 启用；未配置时默认为关闭。流式调用完成后仍会累积完整响应，供意图识别、Rewrite 等结构化解析使用。
+
 ```bash
 conda run -n agent llm-verify "请用一句话问候我"
 ```
@@ -56,7 +58,7 @@ def call_llm(state, client: LLMClient):
     return {"messages": [ChatMessage("assistant", response.text)]}
 ```
 
-当前基础客户端和订单语义解析统一使用 Responses API；暂不包含流式输出或外部订单服务。
+当前基础客户端和订单语义解析支持通过 `LLM_API_MODE` 在 Chat Completions 与 Responses API 间切换，并支持可配置的流式输出；暂不包含外部订单服务。
 
 ## 意图规划子图
 

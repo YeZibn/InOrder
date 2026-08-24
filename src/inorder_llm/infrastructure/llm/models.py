@@ -21,3 +21,14 @@ class LLMResponse:
     model: str
     usage: Optional[Usage] = None
     metadata: Optional[Mapping[str, object]] = None
+
+
+@dataclass(frozen=True)
+class LLMStreamEvent:
+    """Provider-neutral event emitted while an LLM response is streaming."""
+
+    event_type: str
+    delta: str = ""
+    model: Optional[str] = None
+    usage: Optional[Usage] = None
+    metadata: Optional[Mapping[str, object]] = None

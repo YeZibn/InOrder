@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, List, Mapping, Sequence
 
 from ..infrastructure.llm import ChatMessage, LLMClient
+from ..infrastructure.llm.text import strip_json_prefix
 from ..intent.resolver import StructuredIntentError
 from ..catalog import render_vehicle_prompt_vocabulary
 from .models import Entity
@@ -277,7 +278,7 @@ def parse_entities(value: Mapping[str, Any]) -> List[Entity]:
 def parse_entities_from_text(text: str) -> List[Entity]:
     """将 LLM 返回的原始文本解析为 Entity 列表。"""
     try:
-        value = json.loads(text)
+        value = json.loads(strip_json_prefix(text))
     except (TypeError, ValueError) as exc:
         raise StructuredIntentError("LLM returned invalid extraction JSON") from exc
     if not isinstance(value, dict):

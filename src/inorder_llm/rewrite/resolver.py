@@ -5,6 +5,7 @@ from typing import Any, Mapping, Optional
 
 from ..context.models import HistoryConversation, OrderContext
 from ..infrastructure.llm import ChatMessage, LLMClient
+from ..infrastructure.llm.text import strip_json_prefix
 from ..intent.resolver import StructuredIntentError
 from .models import RewriteResult
 
@@ -76,7 +77,7 @@ def parse_rewrite(value: Mapping[str, Any]) -> RewriteResult:
 
 def parse_rewrite_from_text(text: str) -> RewriteResult:
     try:
-        value = json.loads(text)
+        value = json.loads(strip_json_prefix(text))
     except (TypeError, ValueError) as exc:
         raise StructuredIntentError("LLM returned invalid rewrite JSON") from exc
     if not isinstance(value, dict):

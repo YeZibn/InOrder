@@ -8,6 +8,9 @@ class ResponsesTransport(Protocol):
     def complete(self, messages: Sequence[ChatMessage], config: LLMConfig) -> Any:
         ...
 
+    def stream(self, messages: Sequence[ChatMessage], config: LLMConfig) -> Any:
+        ...
+
 
 class OpenAITransport:
     """Configurable OpenAI-compatible transport."""
@@ -26,6 +29,25 @@ class OpenAITransport:
                 request["reasoning_effort"] = config.reasoning_effort
             return self._client.chat.completions.create(**request)
         request = {"model": config.model, "input": [{"role": m.role, "content": m.content} for m in messages]}
+        if config.reasoning_effort is not None:
+            request["reasoning"] = {"effort": config.reasoning_effort}
+        return self._client.responses.create(**request)
+
+    def stream(self, messages, config):
+        if config.api_mode == "chat_completions":
+            request = {
+                "model": config.model,
+                "messages": [{"role": m.role, "content": m.content} for m in messages],
+                "stream": True,
+            }
+            if config.reasoning_effort is not None:
+                request["reasoning_effort"] = config.reasoning_effort
+            return self._client.chat.completions.create(**request)
+        request = {
+            "model": config.model,
+            "input": [{"role": m.role, "content": m.content} for m in messages],
+            "stream": True,
+        }
         if config.reasoning_effort is not None:
             request["reasoning"] = {"effort": config.reasoning_effort}
         return self._client.responses.create(**request)

@@ -61,3 +61,8 @@ def test_invalid_rewrite_output(payload):
 def test_best_effort_rewrite_has_no_clarification_fields():
     result = parse_rewrite_from_text(json.dumps({"rewritten_text": "选择当前订单中的车辆", "extraction_text": "设置当前车辆"}))
     assert result.to_dict() == {"rewritten_text": "选择当前订单中的车辆", "extraction_text": "设置当前车辆"}
+
+
+def test_rewrite_accepts_invisible_stream_prefix():
+    result = parse_rewrite_from_text("\ufeff\u200b{" + '"rewritten_text":"x","extraction_text":"x"}' )
+    assert result.rewritten_text == "x"

@@ -11,7 +11,12 @@ from ..cli.app import IntentCli
 
 def main(argv=None):
     config = load_config()
-    client = LLMClient(config, on_content=lambda content: print("\n[LLM content]\n" + content + "\n[/LLM content]"))
+    if config.streaming:
+        def on_content(content):
+            print(content, end="", flush=True)
+        client = LLMClient(config, on_content=on_content)
+    else:
+        client = LLMClient(config, on_content=lambda content: print("\n[LLM content]\n" + content + "\n[/LLM content]"))
     intent_graph = build_intent_graph(LLMIntentModel(client))
     extractor = (
         LangExtractEntityExtractor(config)

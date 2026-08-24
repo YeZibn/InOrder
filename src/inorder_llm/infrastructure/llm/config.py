@@ -20,6 +20,7 @@ class LLMConfig:
     reasoning_effort: str = None
     extractor_backend: str = "langextract"
     api_mode: str = "chat_completions"
+    streaming: bool = False
 
 
 def load_config(environ=None) -> LLMConfig:
@@ -46,6 +47,9 @@ def load_config(environ=None) -> LLMConfig:
     api_mode = env.get("LLM_API_MODE", "chat_completions").strip().lower()
     if api_mode not in ("chat_completions", "responses"):
         raise ConfigurationError("LLM_API_MODE must be one of: chat_completions, responses")
+    streaming_value = env.get("LLM_STREAMING", "false").strip().lower()
+    if streaming_value not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
+        raise ConfigurationError("LLM_STREAMING must be a boolean")
     return LLMConfig(
         env["LLM_API_KEY"],
         env["LLM_BASE_URL"],
@@ -56,4 +60,5 @@ def load_config(environ=None) -> LLMConfig:
         reasoning_effort,
         extractor_backend,
         api_mode,
+        streaming_value in ("true", "1", "yes", "on"),
     )

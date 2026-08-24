@@ -2,6 +2,7 @@ import json
 from typing import Any, Mapping, Sequence
 
 from ..infrastructure.llm import ChatMessage, LLMClient
+from ..infrastructure.llm.text import strip_json_prefix
 from .protocols import IntentModel
 
 
@@ -78,7 +79,7 @@ class LLMIntentModel:
             ChatMessage("user", user_message),
         ])
         try:
-            value = json.loads(response.text)
+            value = json.loads(strip_json_prefix(response.text))
         except (TypeError, ValueError) as exc:
             raise StructuredIntentError("LLM returned invalid intent JSON") from exc
         if not isinstance(value, dict):
