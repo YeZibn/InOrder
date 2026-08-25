@@ -56,6 +56,8 @@ class ResponsesEvent:
 def test_load_config_and_missing_values():
     loaded = load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_MAX_RETRIES": "3"})
     assert loaded.max_retries == 3
+    assert loaded.backoff_max_seconds == 8.0
+    assert loaded.workflow_timeout_seconds == 90.0
     with pytest.raises(ConfigurationError):
         load_config({"LLM_API_KEY": "k"})
     assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_REASONING_EFFORT": "high"}).reasoning_effort == "high"
@@ -105,6 +107,14 @@ def test_timeout_retries_then_succeeds():
     result = LLMClient(config(), transport=transport).chat([ChatMessage("user", "hi")])
     assert result.text == "hello"
     assert len(transport.calls) == 2
+
+
+def test_backoff_is_capped():
+    transport = FakeTransport(errors=[TimeoutError("x"), TimeoutError("x"), TimeoutError("x")])
+    sleeps = []
+    with pytest.raises(TimeoutError):
+        LLMClient(config(max_retries=2, backoff_seconds=10, backoff_max_seconds=3), transport=transport, sleep=sleeps.append).chat([ChatMessage("user", "hi")])
+    assert sleeps == [3, 3]
 
 
 def test_authentication_does_not_retry_or_leak_secret():

@@ -6,6 +6,7 @@ from typing import Any, Mapping, Optional
 from ..context.models import HistoryConversation, OrderContext
 from ..infrastructure.llm import ChatMessage, LLMClient
 from ..infrastructure.llm.text import strip_json_prefix
+from ..infrastructure.llm.structured import call_with_format_repair
 from ..intent.resolver import StructuredIntentError
 from .models import RewriteResult
 
@@ -93,8 +94,8 @@ class OrderRewriteModel:
         if not message:
             raise ValueError("rewrite message must not be empty")
         user_message = _build_user_message(message, history, order_context, history_limit)
-        response = self.client.chat([ChatMessage("system", REWRITE_SYSTEM_PROMPT), ChatMessage("user", user_message)])
-        return parse_rewrite_from_text(response.text)
+        messages = [ChatMessage("system", REWRITE_SYSTEM_PROMPT), ChatMessage("user", user_message)]
+        return call_with_format_repair(self.client, messages, parse_rewrite_from_text, "上一次输出无法解析。请严格只返回 rewritten_text 和 extraction_text 两个字符串字段组成的 JSON 对象。")
 
 
 def rewrite_order_request(client: LLMClient, message: str, history: HistoryConversation, order_context: OrderContext, history_limit: Optional[int] = 12) -> RewriteResult:

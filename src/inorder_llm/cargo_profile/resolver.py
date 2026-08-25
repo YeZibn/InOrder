@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from ..infrastructure.llm import ChatMessage, LLMClient
 from ..infrastructure.llm.text import strip_json_prefix
+from ..infrastructure.llm.structured import call_with_format_repair
 from ..intent.resolver import StructuredIntentError
 from .models import CargoProfile, CargoProfileResult, CargoProfileSummary
 
@@ -151,8 +152,8 @@ class CargoProfileResolver:
     def profile(self, cargo: Sequence[Mapping[str, Any]]) -> CargoProfileResult:
         snapshot = copy.deepcopy([dict(item) for item in cargo])
         message = "【原始货物列表】\n" + json.dumps(snapshot, ensure_ascii=False, indent=2)
-        response = self.client.chat([ChatMessage("system", CARGO_PROFILE_SYSTEM_PROMPT), ChatMessage("user", message)])
-        result = parse_cargo_profile_from_text(response.text)
+        messages = [ChatMessage("system", CARGO_PROFILE_SYSTEM_PROMPT), ChatMessage("user", message)]
+        result = call_with_format_repair(self.client, messages, parse_cargo_profile_from_text, "上一次输出无法解析。请严格只返回约定的货物画像 JSON，不要添加解释或 Markdown。")
         _validate_against_raw_cargo(result, snapshot)
         return result
 

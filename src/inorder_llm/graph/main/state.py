@@ -11,6 +11,7 @@ class MainGraphState(TypedDict, total=False):
     history: HistoryConversation
     order_context: OrderContext
     reference_time: str
+    deadline_at: float
     main_intent: str
     main_confidence: Optional[float]
     intent_plan: IntentPlan

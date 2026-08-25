@@ -1,9 +1,11 @@
 """Observe a compiled MainGraph without duplicating child graph nodes."""
 
 from collections.abc import Iterator, Mapping
+import time
 from typing import Any
 
 from .events import EventType, WorkflowEvent, error_event
+from ..infrastructure.llm.errors import WorkflowTimeoutError
 
 
 _STAGE_TEXT = {
@@ -41,6 +43,7 @@ class WorkflowEventAdapter:
             if callable(stream):
                 # Consume updates to retain synchronous final semantics while observing boundaries.
                 for update in stream(dict(state), stream_mode="updates"):
+                    self._check_deadline(state)
                     if not isinstance(update, Mapping):
                         continue
                     for node, value in update.items():
@@ -54,7 +57,9 @@ class WorkflowEventAdapter:
                 if result is None:
                     result = dict(self.graph.invoke(dict(state)))
             else:
+                self._check_deadline(state)
                 result = dict(self.graph.invoke(dict(state)))
+            self._check_deadline(state)
         except BaseException as exc:
             yield error_event(exc, self._error_stage(emitted))
             return
@@ -110,3 +115,9 @@ class WorkflowEventAdapter:
     @staticmethod
     def _error_stage(emitted):
         return "intent" if not emitted else "workflow"
+
+    @staticmethod
+    def _check_deadline(state):
+        deadline = state.get("deadline_at")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise WorkflowTimeoutError("workflow deadline exceeded")

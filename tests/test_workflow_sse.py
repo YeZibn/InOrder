@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from inorder_llm.context import HistoryConversation, OrderContext
 from inorder_llm.workflow import EventType, WorkflowEvent, WorkflowEventAdapter, error_event
 from inorder_llm.workflow.api import create_app
+from inorder_llm.infrastructure.llm.errors import WorkflowTimeoutError
 
 
 class FakeGraph:
@@ -39,7 +40,7 @@ def test_event_frame_and_error_are_safe():
     body = json.loads(event.frame()[6:])
     assert body["type"] == "THINKING_STEP"
     assert error_event(RuntimeError("prompt=secret stack"), "extract").to_dict()["payload"] == {
-        "code": "WORKFLOW_ERROR", "message": "工作流处理失败", "stage": "extract"
+        "code": "WORKFLOW_ERROR", "message": "工作流处理失败", "stage": "extract", "retryable": False
     }
 
 
@@ -87,3 +88,12 @@ def test_api_error_is_terminal_without_done():
     items = frames(client.post("/api/v2/chat", json={"session_id": "s", "message": "你好"}).text)
     assert items[-1]["type"] == "ERROR"
     assert all(item["type"] != "DONE" for item in items)
+
+
+def test_timeout_error_is_non_retryable_and_terminal():
+    client = TestClient(create_app(main_graph=FakeGraph(error=WorkflowTimeoutError())))
+    items = frames(client.post("/api/v2/chat", json={"session_id": "s", "message": "你好"}).text)
+    assert items[-1]["type"] == "ERROR"
+    assert items[-1]["payload"] == {
+        "code": "WORKFLOW_TIMEOUT", "message": "工作流处理超时", "stage": "intent", "retryable": False
+    }

@@ -50,6 +50,8 @@ def error_event(exc: BaseException, stage: str = "workflow") -> WorkflowEvent:
         "TimeoutError": "LLM_TIMEOUT",
         "ConfigurationError": "CONFIGURATION_ERROR",
         "InvalidRequestError": "INVALID_REQUEST",
+        "WorkflowTimeoutError": "WORKFLOW_TIMEOUT",
+        "UpstreamError": "LLM_UPSTREAM_ERROR",
     }.get(name, "WORKFLOW_ERROR")
     message = {
         "LLM_AUTHENTICATION_ERROR": "模型服务认证失败",
@@ -57,6 +59,8 @@ def error_event(exc: BaseException, stage: str = "workflow") -> WorkflowEvent:
         "LLM_TIMEOUT": "模型服务请求超时",
         "CONFIGURATION_ERROR": "服务配置错误",
         "INVALID_REQUEST": "请求参数无效",
+        "WORKFLOW_TIMEOUT": "工作流处理超时",
+        "LLM_UPSTREAM_ERROR": "模型服务暂时不可用",
     }.get(code, "工作流处理失败")
-    return WorkflowEvent(EventType.ERROR, {"code": code, "message": message, "stage": stage})
-
+    retryable = bool(getattr(exc, "retryable", False)) and code != "WORKFLOW_TIMEOUT"
+    return WorkflowEvent(EventType.ERROR, {"code": code, "message": message, "stage": stage, "retryable": retryable})

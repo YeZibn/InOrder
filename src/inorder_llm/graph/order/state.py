@@ -11,6 +11,7 @@ from ...vehicle_resolution.models import VehicleResolutionResult
 class OrderGraphState(TypedDict, total=False):
     message: str
     reference_time: str
+    deadline_at: float
     history: HistoryConversation
     order_context: OrderContext
     order_context_updated: bool

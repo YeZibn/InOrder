@@ -35,7 +35,7 @@ class LLMClient:
                 retryable = isinstance(error, (TimeoutError, UpstreamError, RateLimitError))
                 if not retryable or attempt >= self.config.max_retries:
                     raise error from exc
-                delay = error.retry_after if isinstance(error, RateLimitError) and error.retry_after is not None else self.config.backoff_seconds * (2 ** attempt)
+                delay = error.retry_after if isinstance(error, RateLimitError) and error.retry_after is not None else min(self.config.backoff_max_seconds, self.config.backoff_seconds * (2 ** attempt))
                 self._sleep(delay)
         raise AssertionError("unreachable")
 
@@ -70,7 +70,7 @@ class LLMClient:
                 retryable = isinstance(error, (TimeoutError, UpstreamError, RateLimitError))
                 if received or not retryable or attempt >= self.config.max_retries:
                     raise error from exc
-                delay = error.retry_after if isinstance(error, RateLimitError) and error.retry_after is not None else self.config.backoff_seconds * (2 ** attempt)
+                delay = error.retry_after if isinstance(error, RateLimitError) and error.retry_after is not None else min(self.config.backoff_max_seconds, self.config.backoff_seconds * (2 ** attempt))
                 self._sleep(delay)
         raise AssertionError("unreachable")
 
@@ -155,6 +155,6 @@ class LLMClient:
             return RateLimitError("LLM rate limit exceeded", getattr(exc, "retry_after", None))
         if "timeout" in name or "timed out" in text.lower():
             return TimeoutError("LLM request timed out")
-        if "invalid" in name or "badrequest" in name or "400" in text:
+        if "invalid" in name or "badrequest" in name or any(code in text for code in ("400", "404", "422")) or "model not found" in text.lower():
             return InvalidRequestError("LLM request was rejected")
         return UpstreamError("LLM upstream request failed")

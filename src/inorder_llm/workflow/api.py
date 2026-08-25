@@ -1,5 +1,7 @@
 """HTTP/SSE boundary for the full LangGraph workflow."""
 
+import os
+import time
 from typing import Any, Callable, Iterator, Optional
 
 from ..context import HistoryConversation, OrderContext
@@ -71,6 +73,7 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
                 "history": _history(payload.history),
                 "order_context": _context(payload.order_context),
                 "reference_time": payload.reference_time or "",
+                "deadline_at": time.monotonic() + float(os.getenv("WORKFLOW_TIMEOUT_SECONDS", "90")),
             }
         except (ValidationError, ValueError, TypeError) as exc:
             return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": str(exc)}}, status_code=422)

@@ -21,6 +21,8 @@ class LLMConfig:
     extractor_backend: str = "langextract"
     api_mode: str = "chat_completions"
     streaming: bool = False
+    backoff_max_seconds: float = 8.0
+    workflow_timeout_seconds: float = 90.0
 
 
 def load_config(environ=None) -> LLMConfig:
@@ -34,9 +36,11 @@ def load_config(environ=None) -> LLMConfig:
         timeout = float(env.get("LLM_TIMEOUT", "30"))
         max_retries = int(env.get("LLM_MAX_RETRIES", "2"))
         backoff = float(env.get("LLM_BACKOFF_SECONDS", "0.5"))
+        backoff_max = float(env.get("LLM_BACKOFF_MAX_SECONDS", "8"))
+        workflow_timeout = float(env.get("WORKFLOW_TIMEOUT_SECONDS", "90"))
     except ValueError as exc:
-        raise ConfigurationError("LLM_TIMEOUT, LLM_MAX_RETRIES and LLM_BACKOFF_SECONDS must be numeric") from exc
-    if timeout <= 0 or max_retries < 0 or backoff < 0:
+        raise ConfigurationError("LLM timeout and retry settings must be numeric") from exc
+    if timeout <= 0 or max_retries < 0 or backoff < 0 or backoff_max < 0 or workflow_timeout <= 0:
         raise ConfigurationError("LLM timeout must be positive and retry values cannot be negative")
     reasoning_effort = env.get("LLM_REASONING_EFFORT") or None
     if reasoning_effort not in (None, "low", "medium", "high"):
@@ -61,4 +65,6 @@ def load_config(environ=None) -> LLMConfig:
         extractor_backend,
         api_mode,
         streaming_value in ("true", "1", "yes", "on"),
+        backoff_max,
+        workflow_timeout,
     )

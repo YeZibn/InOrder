@@ -26,6 +26,16 @@ class FakeLLMClient:
         return _Resp(self.text)
 
 
+class SequenceLLMClient:
+    def __init__(self, texts):
+        self.texts = list(texts)
+        self.calls = []
+
+    def chat(self, messages):
+        self.calls.append(list(messages))
+        return _Resp(self.texts.pop(0))
+
+
 def test_main_intent_prompt_defines_order_and_qa_with_execution_priority():
     prompt = MAIN_INTENT_SYSTEM_PROMPT
     assert '"main_intent": "order" | "qa"' in prompt
@@ -79,6 +89,19 @@ def test_invalid_json_raises_structured_error():
     model = LLMIntentModel(client)
     with pytest.raises(StructuredIntentError):
         model.classify_main_intent("hi")
+
+
+def test_invalid_json_gets_one_format_repair_attempt():
+    client = SequenceLLMClient(["not json", json.dumps({"main_intent": "qa", "confidence": 0.8})])
+    assert LLMIntentModel(client).classify_main_intent("hi")["main_intent"] == "qa"
+    assert len(client.calls) == 2
+
+
+def test_invalid_json_repair_is_capped_at_one_attempt():
+    client = SequenceLLMClient(["not json", "still not json", json.dumps({"main_intent": "qa"})])
+    with pytest.raises(StructuredIntentError):
+        LLMIntentModel(client).classify_main_intent("hi")
+    assert len(client.calls) == 2
 
 
 def test_non_dict_output_raises_structured_error():
