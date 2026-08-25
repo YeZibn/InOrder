@@ -60,6 +60,25 @@ def call_llm(state, client: LLMClient):
 
 当前基础客户端和订单语义解析支持通过 `LLM_API_MODE` 在 Chat Completions 与 Responses API 间切换，并支持可配置的流式输出；暂不包含外部订单服务。
 
+## SSE 工作流接口
+
+新增 `POST /api/v2/chat`，返回 `text/event-stream`，事件包括 `THINKING_START`、`THINKING_STEP`、`THINKING_DONE`、`CREATE_ORDER_CONTEXT`、`DONE` 和 `ERROR`。本地使用 conda `agent` 环境启动：
+
+```bash
+conda run -n agent python -m pip install -e '.[dev]'
+conda run -n agent inorder-api
+```
+
+请求示例：
+
+```bash
+curl -N -X POST http://localhost:8000/api/v2/chat \
+  -H 'Accept: text/event-stream' -H 'Content-Type: application/json' \
+  -d '{"session_id":"demo","message":"我要运一吨苹果从温州到上海"}'
+```
+
+SSE 仅发送安全的工作流阶段和结构化结果，不发送 prompt、原始模型响应或隐藏推理；原有 `inorder` CLI 命令保持不变。
+
 ## 意图规划子图
 
 意图识别阶段只输出计划，不执行订单业务。主意图只区分 `order` 与 `qa`：含明确订单执行请求即为 `order`，纯信息或操作方法询问为 `qa`；混合消息按「执行优先」归为 `order`。
