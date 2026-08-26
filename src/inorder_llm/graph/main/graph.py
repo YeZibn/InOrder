@@ -67,6 +67,7 @@ class MainGraph(BaseGraph[MainGraphState]):
         order_keys = (
             "rewrite_result", "entities", "order_context", "order_context_updated",
             "cargo_profile_updated", "vehicle_resolution",
+            "order_summary",
         )
         order_data = {key: state[key] for key in order_keys if key in state}
         if state.get("order_graph_entered"):

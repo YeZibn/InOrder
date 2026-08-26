@@ -33,6 +33,7 @@ from .reference_time import (
     resolve_reference_time,
     resolve_context_reference_time,
 )
+from .order_summary import MissingOrderField, OrderSummary, build_order_summary, check_order_completeness
 
 __all__ = [
     "LLMClient", "LLMConfig", "load_config", "ChatMessage", "LLMResponse", "Usage",
@@ -46,4 +47,5 @@ __all__ = [
     "PhoneNormalizationError", "normalize_phone_entity", "normalize_phone_entities",
     "TIMEZONE", "TIME_FORMAT", "ReferenceTimeError", "current_reference_time",
     "resolve_reference_time", "resolve_context_reference_time",
+    "MissingOrderField", "OrderSummary", "build_order_summary", "check_order_completeness",
 ]

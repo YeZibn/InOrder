@@ -9,6 +9,7 @@ from .protocols import CargoProfileModel, EntityExtractorModel, RewriteModel
 from .protocols import VehicleResolutionModel
 from ...normalization import normalize_entities
 from ...vehicle_resolution.models import VehicleResolutionResult
+from ...order_summary import check_order_completeness
 from .state import OrderGraphState
 
 
@@ -107,7 +108,20 @@ class FinalizeNode(BaseNode[OrderGraphState]):
             "order_context_updated": state.get("order_context_updated", False),
             "cargo_profile_updated": state.get("cargo_profile_updated", False),
             "vehicle_resolution": state.get("vehicle_resolution"),
+            "order_summary": state.get("order_summary"),
         }
+
+
+class OrderCompletenessNode(BaseNode[OrderGraphState]):
+    """Build the final deterministic business summary from the final context."""
+
+    name = "order_completeness"
+
+    def run(self, state: OrderGraphState) -> Dict[str, Any]:
+        summary = check_order_completeness(
+            state["order_context"], state.get("vehicle_resolution")
+        )
+        return {"order_summary": summary}
 
 
 class VehicleResolutionNode(BaseNode[OrderGraphState]):
@@ -162,5 +176,6 @@ __all__ = [
     "ContextUpdateNode",
     "CargoProfileNode",
     "VehicleResolutionNode",
+    "OrderCompletenessNode",
     "FinalizeNode",
 ]

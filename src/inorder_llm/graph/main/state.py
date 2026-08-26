@@ -22,6 +22,7 @@ class MainGraphState(TypedDict, total=False):
     order_context_updated: bool
     cargo_profile_updated: bool
     vehicle_resolution: Any
+    order_summary: Any
     order_graph_entered: bool
     rewrite_completed: bool
     extract_executed: bool

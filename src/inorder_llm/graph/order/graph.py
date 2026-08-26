@@ -3,7 +3,7 @@
 from langgraph.graph import END, START, StateGraph
 
 from ...graph.base import BaseGraph
-from .nodes import CargoProfileNode, ContextUpdateNode, ExtractNode, FinalizeNode, RewriteNode, VehicleResolutionNode
+from .nodes import CargoProfileNode, ContextUpdateNode, ExtractNode, FinalizeNode, OrderCompletenessNode, RewriteNode, VehicleResolutionNode
 from .protocols import CargoProfileModel, EntityExtractorModel, RewriteModel, VehicleResolutionModel
 from .state import OrderGraphState
 
@@ -24,6 +24,7 @@ class OrderProcessingGraph(BaseGraph[OrderGraphState]):
             builder.add_node("cargo_profile", CargoProfileNode(self.profile_model))
         if self.vehicle_model is not None:
             builder.add_node("vehicle_resolution", VehicleResolutionNode(self.vehicle_model))
+        builder.add_node("order_completeness", OrderCompletenessNode())
         builder.add_node("finalize", FinalizeNode())
         builder.add_edge(START, "rewrite")
         builder.add_edge("rewrite", "extract")
@@ -35,19 +36,20 @@ class OrderProcessingGraph(BaseGraph[OrderGraphState]):
                 {"cargo_profile": "cargo_profile", "vehicle_resolution": "vehicle_resolution"},
             )
             builder.add_edge("cargo_profile", "vehicle_resolution")
-            builder.add_edge("vehicle_resolution", "finalize")
+            builder.add_edge("vehicle_resolution", "order_completeness")
         elif self.profile_model is not None:
             builder.add_conditional_edges(
                 "update_context",
-                lambda state: "cargo_profile" if state.get("cargo_updated") else "finalize",
-                {"cargo_profile": "cargo_profile", "finalize": "finalize"},
+                lambda state: "cargo_profile" if state.get("cargo_updated") else "order_completeness",
+                {"cargo_profile": "cargo_profile", "order_completeness": "order_completeness"},
             )
-            builder.add_edge("cargo_profile", "finalize")
+            builder.add_edge("cargo_profile", "order_completeness")
         elif self.vehicle_model is not None:
             builder.add_edge("update_context", "vehicle_resolution")
-            builder.add_edge("vehicle_resolution", "finalize")
+            builder.add_edge("vehicle_resolution", "order_completeness")
         else:
-            builder.add_edge("update_context", "finalize")
+            builder.add_edge("update_context", "order_completeness")
+        builder.add_edge("order_completeness", "finalize")
         builder.add_edge("finalize", END)
         return builder
 

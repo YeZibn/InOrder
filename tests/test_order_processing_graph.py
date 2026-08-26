@@ -103,6 +103,8 @@ def test_order_processing_graph_rewrites_then_extracts_incremental_text():
     assert len(extractor.calls) == 1
     assert extractor.calls[0][0] == "再加一吨苹果"
     assert extractor.calls[0][1] == "2026-08-17 10:00"
+    assert result["order_summary"].status == "incomplete"
+    assert any(item.field == "pickup_location" for item in result["order_summary"].missing_required)
 
 
 def test_matched_user_vehicle_short_circuits_estimation():
@@ -228,6 +230,20 @@ def test_graph_skips_profile_when_context_update_does_not_change_cargo():
     result = build_order_processing_graph(rewrite, extractor, profile).invoke(_state())
 
     assert profile.calls == []
+
+
+def test_completeness_node_runs_after_vehicle_resolution_and_returns_summary():
+    rewrite = FakeRewriteModel(RewriteResult("设置完整订单", "设置完整订单"))
+    extractor = FakeExtractor([])
+    context = OrderContext(
+        pickup_location={"city": "温州"},
+        dropoff_location={"city": "上海"},
+        cargo=[{"name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}],
+        delivery_time={"context": "new_order", "start": "2026-08-28T10:00:00"},
+    )
+    result = build_order_processing_graph(rewrite, extractor).invoke(_state(context=context))
+    assert result["order_summary"].status == "complete"
+    assert "温州" in result["order_summary"].summary
     assert result["cargo_profile_updated"] is False
 
 

@@ -128,7 +128,7 @@ class WorkflowEventAdapter:
     @staticmethod
     def _safe_result(result: Mapping[str, Any]) -> dict[str, Any]:
         # Final event contains only already structured public summaries.
-        allowed = ("intent_result", "order_result", "order_graph_entered", "qa_placeholder")
+        allowed = ("intent_result", "order_result", "order_graph_entered", "order_summary", "qa_placeholder")
         return {key: result[key] for key in allowed if key in result}
 
     @staticmethod

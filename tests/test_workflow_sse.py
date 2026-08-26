@@ -62,6 +62,21 @@ def test_adapter_order_emits_context_only_when_updated():
     assert kinds[-2:] == [EventType.THINKING_DONE, EventType.DONE]
 
 
+def test_done_event_includes_order_summary_without_raw_dataclass_leak():
+    context = OrderContext(
+        pickup_location={"city": "温州"}, dropoff_location={"city": "上海"},
+        cargo=[{"name": "苹果", "weight": ["1吨"]}],
+        delivery_time={"context": "new_order", "start": "2026-08-28T10:00:00"},
+    )
+    result = {"intent_result": {"main_intent": "order"}, "order_graph_entered": True,
+              "order_result": {"order_context": context, "order_context_updated": True,
+                               "order_summary": {"status": "complete", "summary": "订单已准备好"}}}
+    items = list(WorkflowEventAdapter(FakeGraph(result)).events({"session_id": "s"}))
+    done = items[-1].to_dict()
+    assert done["type"] == "DONE"
+    assert done["payload"]["result"]["order_result"]["order_summary"]["status"] == "complete"
+
+
 def test_adapter_exposes_only_business_stages_for_streaming_graph():
     events = list(WorkflowEventAdapter(StreamingGraph({
         "intent_result": {"main_intent": "order"},
@@ -120,6 +135,28 @@ def test_memory_page_does_not_use_sse_event_names_as_display_titles():
     # type/stage (for example, `event.type`) to the user.
     assert "p.title || p.stage || event.type" not in page
     assert "event.type;" not in page
+    assert "user_message" in page
+
+
+def test_memory_page_renders_final_order_summary_in_main_conversation():
+    page = (Path(__file__).parents[1] / "frontend" / "index.html").read_text(encoding="utf-8")
+    # The final business reply must be a normal assistant bubble in the main
+    # conversation, rather than only a value in the right-side summary panel.
+    assert "const getOrderSummary = result" in page
+    assert "const getOrderUserMessage = result" in page
+    assert "addBubble('assistant','InOrder',userMessage)" in page
+    assert "state.messages.push({role:'assistant',content:userMessage})" in page
+    assert "result?.order_summary" in page
+    assert "liveBox.dataset.summaryAdded !== 'true'" in page
+
+
+def test_memory_page_keeps_summary_compatibility_and_does_not_add_empty_reply():
+    page = (Path(__file__).parents[1] / "frontend" / "index.html").read_text(encoding="utf-8")
+    # Missing/empty summaries (for QA or old servers) must not create a fake
+    # order reply, while the existing ordinary completion fallback remains.
+    assert "typeof summary?.user_message === 'string'" in page
+    assert "if (userMessage &&" in page
+    assert "(state.last_result?.order_result?'订单信息已更新。':'已完成意图识别。')" in page
 
 
 class CapturingGraph(FakeGraph):

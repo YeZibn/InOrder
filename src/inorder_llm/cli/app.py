@@ -53,6 +53,14 @@ def _assistant_summary(result, chain: str, mode: Optional[str] = None):
         intent_result = result.get("intent_result", result)
         order_result = result.get("order_result")
         if order_result is not None:
+            order_summary = _data(order_result.get("order_summary"))
+            if isinstance(order_summary, dict):
+                intent = _intent_data(intent_result).get("main_intent")
+                status = order_summary.get("status", "incomplete")
+                missing = order_summary.get("missing_required", [])
+                text = order_summary.get("user_message") or order_summary.get("summary", "订单已解析")
+                metadata = {"chain": "full", "main_intent": intent, "order_status": status}
+                return text, metadata
             summary, metadata = _assistant_summary(order_result, "order")
             intent = _intent_data(intent_result).get("main_intent")
             metadata.update({"chain": "full", "main_intent": intent})
@@ -68,6 +76,10 @@ def _assistant_summary(result, chain: str, mode: Optional[str] = None):
             text += "；问答入口尚未实现"
         return text, {"chain": "full", "main_intent": intent}
     if chain == "order":
+        order_summary = _data(result.get("order_summary"))
+        if isinstance(order_summary, dict):
+            text = order_summary.get("user_message") or order_summary.get("summary", "订单已解析")
+            return text, {"chain": "order", "order_status": order_summary.get("status", "incomplete")}
         count = result.get("entity_count", len(result.get("entities", [])))
         updated = bool(result.get("order_context_updated"))
         return f"订单解析完成；Extract 提取 {count} 个实体；订单上下文" + ("已更新。" if updated else "未更新。"), {
@@ -87,6 +99,9 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
     if isinstance(result, str): return result
     if chain == "qa": return "问答入口尚未实现（当前仅支持意图识别）。"
     if chain == "order":
+        order_summary = _data(result.get("order_summary"))
+        if isinstance(order_summary, dict):
+            return str(order_summary.get("user_message") or order_summary.get("summary", "订单已解析"))
         rewrite = _data(result.get("rewrite_result"))
         lines = ["链路：order（仅解析，未执行业务）"]
         lines.append("订单处理：" + ("已进入" if result.get("order_graph_entered") else "未进入"))

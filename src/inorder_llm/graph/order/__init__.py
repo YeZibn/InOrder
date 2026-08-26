@@ -6,6 +6,7 @@ from .nodes import (
     ContextUpdateNode,
     ExtractNode,
     FinalizeNode,
+    OrderCompletenessNode,
     RewriteNode,
     VehicleResolutionNode,
 )
@@ -21,4 +22,5 @@ __all__ = [
     "CargoProfileNode",
     "VehicleResolutionNode",
     "FinalizeNode",
+    "OrderCompletenessNode",
 ]

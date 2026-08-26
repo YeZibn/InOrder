@@ -188,6 +188,31 @@ def test_order_chain_persists_updated_context_between_messages():
     assert "订单上下文：已更新" in output
 
 
+def test_cli_prefers_business_summary_and_missing_field_prompt():
+    class SummaryGraph:
+        def invoke(self, state):
+            return {
+                "order_summary": {
+                    "status": "incomplete",
+                    "summary": "已识别从温州发往上海的苹果运输需求。",
+                    "user_message": "目前已为您识别出：已识别从温州发往上海的苹果运输需求。\n为了继续为您安排，还需要补充送达时间。",
+                    "missing_required": [{"field": "delivery_time", "label": "送达时间"}],
+                    "next_prompt": "请补充送达时间。",
+                },
+                "order_context_updated": True,
+            }
+
+    cli = IntentCli(order_graph=SummaryGraph())
+    cli.switch_chain("order")
+    output = cli.handle_message("我要运苹果")
+    assert "已识别从温州发往上海" in output
+    assert "还需要补充送达时间" in output
+    assert "为了继续为您安排" in output
+    assert "目前已为您识别出" in output
+    assert "incomplete" not in output
+    assert "Rewrite" not in output
+
+
 def test_successful_message_appends_concise_assistant_summary_only():
     cli = IntentCli(graph=FakeGraph())
     cli.handle_message("我要下单")

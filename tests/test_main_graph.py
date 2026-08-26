@@ -70,6 +70,7 @@ def test_parent_routes_order_and_passes_context_to_child():
     assert rewrite.calls[0][1] is not None
     assert rewrite.calls[0][2] is not None
     assert extract.calls == [("新增一吨苹果", "2026-08-24 10:00")]
+    assert result["order_result"]["order_summary"].status == "incomplete"
 
 
 def test_parent_propagates_child_errors():

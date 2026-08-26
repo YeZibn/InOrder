@@ -1,10 +1,4 @@
-# order-processing-subgraph Specification
-
-## Purpose
-
-为订单输入提供一个独立、可测试且仅负责语义解析的 LangGraph 子图，将上下文重写、实体提取和订单草稿更新串联起来，为后续归一化提供稳定输入。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Provide an order processing subgraph
 
@@ -21,18 +15,22 @@
 - **THEN** 子图返回基于输入订单上下文和本轮实体计算出的新 `OrderContext`
 
 #### Scenario: Subgraph returns vehicle resolution
+
 - **WHEN** 订单解析完成且货物画像或用户车型信息可用于车型决策
 - **THEN** 子图返回最终车型、特殊规格、来源和原因
 
 #### Scenario: Subgraph returns vehicle candidates
+
 - **WHEN** 订单解析完成且用户车型不可用或缺失
 - **THEN** 子图返回确定性计算得到的 0 至 3 个车型候选及其来源和原因
 
 #### Scenario: Process an order through the final summary node
+
 - **WHEN** 订单上下文完成车型处理
 - **THEN** 子图执行订单完整性检查作为最后一个节点，并在结果中返回订单状态、事实摘要和缺失字段提示
 
 #### Scenario: Return an incomplete order without failure
+
 - **WHEN** 订单缺少送达时间或其他最小字段
 - **THEN** 子图正常完成并返回 `incomplete` 摘要，不将业务字段缺失当作 LangGraph 或 LLM 异常
 
@@ -66,7 +64,7 @@
 
 ### Requirement: Keep parsing-only boundary
 
-订单处理子图 SHALL 只负责 rewrite、grounded 实体提取、订单上下文更新、货物画像和确定性车型解析/估算；不得调用历史订单服务、订单创建或确认工具，不得写入数据库。用户车型匹配成功时不得因货物画像而替换车型。对于提取结果中的业务 attributes，子图 SHALL 原样应用 LLM 已作出的 action 和字段决策，不得自行补全或重判。
+订单处理子图 SHALL 只负责 rewrite、grounded 实体提取、订单上下文更新、货物画像和确定性车型解析/估算，以及基于最终上下文的完整性检查和摘要；不得调用历史订单服务、订单创建或确认工具，不得写入数据库。用户车型匹配成功时不得因货物画像而替换车型。对于提取结果中的业务 attributes，子图 SHALL 原样应用 LLM 已作出的 action 和字段决策，不得自行补全或重判。
 
 #### Scenario: Parsing applies mapped grounded entities in memory only
 
@@ -84,10 +82,12 @@
 - **THEN** 子图不返回部分更新后的上下文
 
 #### Scenario: Vehicle resolution has no external side effect
+
 - **WHEN** 子图执行车型解析或估算
 - **THEN** 结果只更新内存中的订单状态和派生决策，不触发外部业务副作用
 
 #### Scenario: Completeness check has no external side effect
+
 - **WHEN** 子图执行订单完整性检查和摘要生成
 - **THEN** 系统只读取最终订单上下文并返回摘要，不创建订单、不写入数据库且不调用外部服务
 
@@ -106,6 +106,7 @@
 - **THEN** 子图调用失败并暴露结构化错误，不产生可被误用的部分结果
 
 #### Scenario: Vehicle estimation has no LLM selection call
+
 - **WHEN** 子图进入车型估算阶段
 - **THEN** 车型结果由车型主数据和确定性装载计算生成，不调用车型选择 LLM
 
@@ -114,9 +115,11 @@
 订单处理图 SHALL 可独立调用，也 SHALL 能作为 MainGraph 的子图挂载；接收父图传入的消息、参考时间、历史对话和订单上下文，并返回可汇总的订单处理结果。
 
 #### Scenario: Parent graph passes order context
+
 - **WHEN** MainGraph 路由到订单子图
 - **THEN** 订单子图接收父图传入的历史对话、订单上下文和参考时间
 
 #### Scenario: Order subgraph output returns to parent
+
 - **WHEN** 订单子图完成解析
 - **THEN** 父图可以取得 rewrite、entities、OrderContext、车型结果和订单摘要并汇总返回
