@@ -1,22 +1,17 @@
 """Interactive CLI for the full, intent, and order processing chains."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
 import json
 from typing import Callable, List, Optional
-from zoneinfo import ZoneInfo
 
 from ..context.models import HistoryConversation, OrderContext
+from ..reference_time import resolve_reference_time
 from .runners import ChainContext, FullChainRunner, IntentChainRunner, OrderChainRunner
 
 CHAINS = ("full", "intent", "order")
 # Kept as a public compatibility alias for callers of the previous CLI.
 MODES = ("auto", "order", "qa", "plan")
 HELP_TEXT = "命令：/chain [full|intent|order]、/intent、/mode、/context、/conversation、/clear、/help、/exit"
-
-
-def _reference_time() -> str:
-    return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
 
 
 @dataclass
@@ -26,7 +21,8 @@ class CliSession:
     messages: List[str] = field(default_factory=list)
     history: HistoryConversation = field(default_factory=HistoryConversation)
     order_context: OrderContext = field(default_factory=OrderContext)
-    reference_time: str = field(default_factory=_reference_time)
+    # Resolved at the start of each message; never cached at session creation.
+    reference_time: str = ""
     running: bool = True
 
 
@@ -193,6 +189,7 @@ class IntentCli:
 
     def handle_message(self, message):
         self.session.messages.append(message)
+        self.session.reference_time = resolve_reference_time(None)
         if self.session.mode == "qa": return format_result(None, "qa")
         self.session.history.append_user(message)
         context = ChainContext(self.session.history, self.session.order_context, self.session.reference_time)

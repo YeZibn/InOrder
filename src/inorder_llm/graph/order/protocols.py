@@ -1,6 +1,6 @@
 """Minimal injectable protocols used by the order-processing graph."""
 
-from typing import List, Protocol, Sequence, Mapping, Any
+from typing import List, Optional, Protocol, Sequence, Mapping, Any
 
 from ...context.models import HistoryConversation, OrderContext
 from ...extract.models import Entity
@@ -15,6 +15,7 @@ class RewriteModel(Protocol):
         message: str,
         history: HistoryConversation,
         order_context: OrderContext,
+        reference_time: Optional[str] = None,
     ) -> RewriteResult:
         ...
 

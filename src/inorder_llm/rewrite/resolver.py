@@ -8,6 +8,7 @@ from ..infrastructure.llm import ChatMessage, LLMClient
 from ..infrastructure.llm.text import strip_json_prefix
 from ..infrastructure.llm.structured import call_with_format_repair
 from ..intent.resolver import StructuredIntentError
+from ..reference_time import resolve_reference_time
 from .models import RewriteResult
 
 
@@ -59,8 +60,13 @@ def _format_history(history: HistoryConversation, limit: Optional[int]) -> str:
     return "\n".join(lines)
 
 
-def _build_user_message(message: str, history: HistoryConversation, order_context: OrderContext, history_limit: Optional[int]) -> str:
-    return "\n\n".join([_format_context(order_context), _format_history(history, history_limit), "【用户本轮输入】\n" + message])
+def _build_user_message(message: str, history: HistoryConversation, order_context: OrderContext, history_limit: Optional[int], reference_time: str) -> str:
+    return "\n\n".join([
+        "【参考时间】" + reference_time,
+        _format_context(order_context),
+        _format_history(history, history_limit),
+        "【用户本轮输入】\n" + message,
+    ])
 
 
 def parse_rewrite(value: Mapping[str, Any]) -> RewriteResult:
@@ -90,16 +96,31 @@ class OrderRewriteModel:
     def __init__(self, client: LLMClient):
         self.client = client
 
-    def rewrite(self, message: str, history: HistoryConversation, order_context: OrderContext, history_limit: Optional[int] = 12) -> RewriteResult:
+    def rewrite(
+        self,
+        message: str,
+        history: HistoryConversation,
+        order_context: OrderContext,
+        history_limit: Optional[int] = 12,
+        reference_time: Optional[str] = None,
+    ) -> RewriteResult:
         if not message:
             raise ValueError("rewrite message must not be empty")
-        user_message = _build_user_message(message, history, order_context, history_limit)
+        reference_time = resolve_reference_time(reference_time)
+        user_message = _build_user_message(message, history, order_context, history_limit, reference_time)
         messages = [ChatMessage("system", REWRITE_SYSTEM_PROMPT), ChatMessage("user", user_message)]
         return call_with_format_repair(self.client, messages, parse_rewrite_from_text, "上一次输出无法解析。请严格只返回 rewritten_text 和 extraction_text 两个字符串字段组成的 JSON 对象。")
 
 
-def rewrite_order_request(client: LLMClient, message: str, history: HistoryConversation, order_context: OrderContext, history_limit: Optional[int] = 12) -> RewriteResult:
-    return OrderRewriteModel(client).rewrite(message, history, order_context, history_limit)
+def rewrite_order_request(
+    client: LLMClient,
+    message: str,
+    history: HistoryConversation,
+    order_context: OrderContext,
+    history_limit: Optional[int] = 12,
+    reference_time: Optional[str] = None,
+) -> RewriteResult:
+    return OrderRewriteModel(client).rewrite(message, history, order_context, history_limit, reference_time)
 
 
 __all__ = ["REWRITE_SYSTEM_PROMPT", "OrderRewriteModel", "rewrite_order_request", "parse_rewrite", "parse_rewrite_from_text"]

@@ -19,6 +19,38 @@ class FakeClient:
         return LLMResponse(json.dumps(self.payload, ensure_ascii=False), "test")
 
 
+class SequenceClient:
+    def __init__(self, payloads):
+        self.payloads = list(payloads)
+        self.calls = []
+
+    def chat(self, messages):
+        self.calls.append(messages)
+        payload = self.payloads.pop(0)
+        return LLMResponse(payload, "test")
+
+
+def test_rewrite_includes_request_reference_time():
+    client = FakeClient({"rewritten_text": "明天发货", "extraction_text": "明天发货"})
+    OrderRewriteModel(client).rewrite(
+        "明天发货", HistoryConversation(), OrderContext(), reference_time="2026-08-26 10:00"
+    )
+    assert "【参考时间】2026-08-26 10:00" in client.calls[0][1].content
+
+
+def test_rewrite_format_repair_reuses_reference_time():
+    client = SequenceClient([
+        "not-json",
+        json.dumps({"rewritten_text": "明天发货", "extraction_text": "明天发货"}, ensure_ascii=False),
+    ])
+    result = OrderRewriteModel(client).rewrite(
+        "明天发货", HistoryConversation(), OrderContext(), reference_time="2026-08-26 10:00"
+    )
+    assert result.extraction_text == "明天发货"
+    assert len(client.calls) == 2
+    assert all("【参考时间】2026-08-26 10:00" in messages[1].content for messages in client.calls)
+
+
 def test_rewrite_result_serializes():
     result = RewriteResult("已有苹果，本轮新增香蕉", "新增一吨香蕉")
     assert result.to_dict() == {"rewritten_text": "已有苹果，本轮新增香蕉", "extraction_text": "新增一吨香蕉"}

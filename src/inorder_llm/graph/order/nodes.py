@@ -1,5 +1,6 @@
 """Nodes for the standalone order-processing subgraph."""
 
+import inspect
 from typing import Any, Dict, Literal
 
 from ...graph.base import BaseNode
@@ -18,9 +19,24 @@ class RewriteNode(BaseNode[OrderGraphState]):
         self.model = model
 
     def run(self, state: OrderGraphState) -> Dict[str, Any]:
-        result = self.model.rewrite(
-            state["message"], state["history"], state["order_context"]
+        # Keep compatibility with injected legacy implementations while making
+        # the request-scoped anchor explicit for production resolvers. Inspect
+        # the signature instead of catching TypeError from inside the model.
+        parameters = inspect.signature(self.model.rewrite).parameters.values()
+        accepts_reference_time = any(
+            parameter.name == "reference_time"
+            or parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters
         )
+        if accepts_reference_time:
+            result = self.model.rewrite(
+                state["message"], state["history"], state["order_context"],
+                reference_time=state.get("reference_time"),
+            )
+        else:
+            result = self.model.rewrite(
+                state["message"], state["history"], state["order_context"]
+            )
         return {
             "rewrite_result": result,
         }

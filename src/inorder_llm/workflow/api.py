@@ -5,6 +5,7 @@ import time
 from typing import Any, Callable, Iterator, Optional
 
 from ..context import HistoryConversation, OrderContext
+from ..reference_time import ReferenceTimeError, resolve_reference_time
 from .adapter import WorkflowEventAdapter
 from .events import error_event
 
@@ -67,15 +68,16 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
             payload = ChatRequest.model_validate(body)
             if not payload.message.strip():
                 raise ValueError("message must not be empty")
+            resolved_reference_time = resolve_reference_time(payload.reference_time)
             state = {
                 "session_id": payload.session_id,
                 "message": payload.message,
                 "history": _history(payload.history),
                 "order_context": _context(payload.order_context),
-                "reference_time": payload.reference_time or "",
+                "reference_time": resolved_reference_time,
                 "deadline_at": time.monotonic() + float(os.getenv("WORKFLOW_TIMEOUT_SECONDS", "90")),
             }
-        except (ValidationError, ValueError, TypeError) as exc:
+        except (ValidationError, ReferenceTimeError, ValueError, TypeError) as exc:
             return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": str(exc)}}, status_code=422)
 
         async def stream():

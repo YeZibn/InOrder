@@ -83,6 +83,34 @@ def test_api_valid_request_and_validation_error():
     assert bad.status_code == 422
 
 
+class CapturingGraph(FakeGraph):
+    def __init__(self):
+        super().__init__()
+        self.states = []
+
+    def invoke(self, state):
+        self.states.append(state)
+        return super().invoke(state)
+
+
+def test_api_reference_time_is_valid_or_caller_supplied():
+    graph = CapturingGraph()
+    client = TestClient(create_app(main_graph=graph))
+    client.post("/api/v2/chat", json={"session_id": "s", "message": "你好"})
+    assert graph.states[0]["reference_time"]
+    assert len(graph.states[0]["reference_time"]) == 16
+    client.post("/api/v2/chat", json={"session_id": "s", "message": "你好", "reference_time": "2020-01-02 03:04"})
+    assert graph.states[1]["reference_time"] == "2020-01-02 03:04"
+
+
+def test_api_rejects_invalid_reference_time_before_graph():
+    graph = CapturingGraph()
+    client = TestClient(create_app(main_graph=graph))
+    response = client.post("/api/v2/chat", json={"session_id": "s", "message": "你好", "reference_time": "tomorrow"})
+    assert response.status_code == 422
+    assert graph.states == []
+
+
 def test_api_error_is_terminal_without_done():
     client = TestClient(create_app(main_graph=FakeGraph(error=RuntimeError("secret"))))
     items = frames(client.post("/api/v2/chat", json={"session_id": "s", "message": "你好"}).text)
