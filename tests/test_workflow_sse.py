@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -81,6 +82,44 @@ def test_api_valid_request_and_validation_error():
     assert [item["type"] for item in frames(response.text)][-1] == "DONE"
     bad = client.post("/api/v2/chat", json={"session_id": "s", "message": " "})
     assert bad.status_code == 422
+
+
+def test_api_serves_same_origin_memory_test_page():
+    client = TestClient(create_app(main_graph=FakeGraph()))
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "InOrder" in response.text
+    assert "api/v2/chat" in response.text
+
+
+def test_memory_page_maps_sse_events_to_friendly_progress_hints():
+    page = (Path(__file__).parents[1] / "frontend" / "index.html").read_text(encoding="utf-8")
+    # The browser owns this presentation mapping; backend event names must not
+    # be rendered as the user-facing progress text.
+    for hint in (
+        "正在理解您的需求…",
+        "正在识别您的运输需求…",
+        "正在整理订单信息…",
+        "正在分析货物特征…",
+        "正在匹配合适车型…",
+        "订单信息已更新",
+        "处理完成",
+    ):
+        assert hint in page
+    assert "const STAGE_HINTS" in page
+    assert "const friendlyHint" in page
+    assert "const createProgressBubble" in page
+    assert "正在处理您的订单…" in page
+    assert "normalizeStage(payload.stage)" in page
+    assert "|| 'unknown'" in page
+
+
+def test_memory_page_does_not_use_sse_event_names_as_display_titles():
+    page = (Path(__file__).parents[1] / "frontend" / "index.html").read_text(encoding="utf-8")
+    # Event names remain in dispatch logic, but no fallback may display the raw
+    # type/stage (for example, `event.type`) to the user.
+    assert "p.title || p.stage || event.type" not in page
+    assert "event.type;" not in page
 
 
 class CapturingGraph(FakeGraph):

@@ -77,6 +77,8 @@ curl -N -X POST http://localhost:8000/api/v2/chat \
   -d '{"session_id":"demo","message":"我要运一吨苹果从温州到上海"}'
 ```
 
+启动 `inorder-api` 后也可以直接访问 `http://localhost:8000/` 打开内置测试前端。页面使用浏览器内存保存 `session_id`、`history` 和完整 `order_context`，通过 `fetch + SSE` 展示意图识别、订单处理、货物画像、车型处理及最终结果，适合连续测试“再加货物”“修改车型”等多轮输入。SSE 阶段会转换为“正在理解您的需求…”等面向用户的小提示，并实时保留处理进度；刷新或点击“清空会话”会丢弃当前内存状态。
+
 `reference_time` 是本次用户消息的时间锚点，格式为 `YYYY-MM-DD HH:MM`。调用方传入时优先使用；未传入时，Python 在 CLI 消息入口或 HTTP 请求入口按 `Asia/Shanghai` 当前时间生成一次。该值写入本次工作流 state，Rewrite、Extract 及格式修复重试均复用，不会在节点或重试中重新取时间。
 
 多轮订单请求会将该时间锚点写入 `order_context.reference_time`。后续请求按 `order_context.reference_time`、请求级 `reference_time`、当前上海时间的顺序选择，已有上下文时间不会被新的请求值覆盖；调用方应将返回的完整 `order_context` 原样传回下一轮。

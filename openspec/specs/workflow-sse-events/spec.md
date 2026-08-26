@@ -8,7 +8,7 @@
 
 ### Requirement: Provide an SSE chat endpoint
 
-系统 SHALL 提供 `POST /api/v2/chat` 接口，并在请求协商 `Accept: text/event-stream` 时以 `text/event-stream` 返回工作流事件。Python SHALL 从请求中的 `order_context.reference_time`、请求级 `reference_time` 或当前 `Asia/Shanghai` 时间按优先级确定一个会话时间锚点，将其写入工作流 state，并在更新后的 `OrderContext` 快照中返回。
+系统 SHALL 提供 `POST /api/v2/chat` 接口，并在请求协商 `Accept: text/event-stream` 时以 `text/event-stream` 返回工作流事件；同时 SHALL 在 API 服务根路径提供本地测试页面，该页面使用同源请求调用该接口。Python SHALL 从请求中的 `order_context.reference_time`、请求级 `reference_time` 或当前 `Asia/Shanghai` 时间按优先级确定一个会话时间锚点，将其写入工作流 state，并在更新后的 `OrderContext` 快照中返回。
 
 #### Scenario: Accept a chat request
 - **WHEN** 客户端提交包含 `session_id`、`message`、可选 `history`、可选 `order_context` 和可选 `reference_time` 的 JSON 请求
@@ -17,6 +17,14 @@
 #### Scenario: Reject an invalid request
 - **WHEN** 请求缺少非空 `message` 或请求体字段类型不符合接口约定
 - **THEN** 系统返回明确的 4xx 错误，不启动 LangGraph 工作流
+
+#### Scenario: Open same-origin test page
+- **WHEN** 用户访问 API 服务根路径 `/`
+- **THEN** 系统返回本地测试页面，页面可以同源调用 `/api/v2/chat`，无需额外 CORS 配置
+
+#### Scenario: Adapt events to user-facing progress
+- **WHEN** 同源测试页面接收到公开 SSE 事件
+- **THEN** 页面按事件到达顺序实时转换为用户可理解的进度小提示，并保持现有 SSE 事件协议不变；技术事件名和内部节点名不直接呈现给用户
 
 #### Scenario: Reuse context reference time
 - **WHEN** `order_context.reference_time` 存在且格式有效

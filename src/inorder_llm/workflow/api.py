@@ -3,6 +3,7 @@
 import os
 import time
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
 from ..context import HistoryConversation, OrderContext
@@ -48,6 +49,15 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
     if FastAPI is None:
         raise RuntimeError("SSE API requires fastapi and uvicorn")
     app = FastAPI(title="InOrder API", version="2")
+
+    frontend_path = Path(__file__).resolve().parents[3] / "frontend" / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    async def index():
+        if not frontend_path.is_file():
+            return JSONResponse({"error": {"code": "UI_NOT_FOUND", "message": "frontend/index.html not found"}}, status_code=404)
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(frontend_path.read_text(encoding="utf-8"))
 
     class ChatRequest(BaseModel):
         session_id: str = Field(min_length=1)
