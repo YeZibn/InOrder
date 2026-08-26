@@ -2,10 +2,11 @@
 
 import os
 import time
+from copy import deepcopy
 from typing import Any, Callable, Iterator, Optional
 
 from ..context import HistoryConversation, OrderContext
-from ..reference_time import ReferenceTimeError, resolve_reference_time
+from ..reference_time import ReferenceTimeError, resolve_context_reference_time
 from .adapter import WorkflowEventAdapter
 from .events import error_event
 
@@ -68,12 +69,17 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
             payload = ChatRequest.model_validate(body)
             if not payload.message.strip():
                 raise ValueError("message must not be empty")
-            resolved_reference_time = resolve_reference_time(payload.reference_time)
+            order_context = _context(payload.order_context)
+            resolved_reference_time = resolve_context_reference_time(
+                order_context.reference_time, payload.reference_time
+            )
+            order_context = deepcopy(order_context)
+            order_context.reference_time = resolved_reference_time
             state = {
                 "session_id": payload.session_id,
                 "message": payload.message,
                 "history": _history(payload.history),
-                "order_context": _context(payload.order_context),
+                "order_context": order_context,
                 "reference_time": resolved_reference_time,
                 "deadline_at": time.monotonic() + float(os.getenv("WORKFLOW_TIMEOUT_SECONDS", "90")),
             }

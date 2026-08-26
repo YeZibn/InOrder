@@ -116,15 +116,23 @@ def test_chain_switches_and_routes_intent_order_and_full():
     assert len(order.calls) == 2
 
 
-def test_cli_refreshes_reference_time_for_each_message(monkeypatch):
+def test_cli_reuses_reference_time_from_context(monkeypatch):
     values = iter(["2026-08-26 10:00", "2026-08-26 10:01"])
-    monkeypatch.setattr("inorder_llm.cli.app.resolve_reference_time", lambda _: next(values))
+    monkeypatch.setattr("inorder_llm.cli.app.resolve_context_reference_time", lambda context, request=None: next(values) if not context else context)
     intent = FakeIntentGraph("order")
     order = FakeOrderGraph()
     cli = IntentCli(intent_graph=intent, order_graph=order)
     cli.handle_message("第一条")
     cli.handle_message("第二条")
-    assert [call["reference_time"] for call in order.calls] == ["2026-08-26 10:00", "2026-08-26 10:01"]
+    assert [call["reference_time"] for call in order.calls] == ["2026-08-26 10:00", "2026-08-26 10:00"]
+
+
+def test_cli_context_time_wins_over_newly_generated_time(monkeypatch):
+    monkeypatch.setattr("inorder_llm.cli.app.resolve_context_reference_time", lambda context, request=None: context or "2026-08-26 10:00")
+    cli = IntentCli(intent_graph=FakeIntentGraph("order"), order_graph=FakeOrderGraph())
+    cli.session.order_context.reference_time = "2020-01-02 03:04"
+    cli.handle_message("后续消息")
+    assert cli.session.reference_time == "2020-01-02 03:04"
 
 
 def test_full_qa_skips_order_graph_and_legacy_intent_is_alias():

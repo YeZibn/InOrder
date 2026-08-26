@@ -1,6 +1,7 @@
 """Observe a compiled MainGraph without duplicating child graph nodes."""
 
 from collections.abc import Iterator, Mapping
+from copy import deepcopy
 import time
 from typing import Any
 
@@ -63,6 +64,24 @@ class WorkflowEventAdapter:
         except BaseException as exc:
             yield error_event(exc, self._error_stage(emitted))
             return
+
+        # Compatibility graphs may return a new context without carrying the
+        # request-bound anchor initialized at the API boundary. Preserve it in
+        # the public result without mutating the graph input.
+        anchor = state.get("reference_time")
+        if anchor and isinstance(result, Mapping):
+            order_result = result.get("order_result")
+            context = order_result.get("order_context") if isinstance(order_result, Mapping) else result.get("order_context")
+            if context is not None and hasattr(context, "reference_time") and not context.reference_time:
+                preserved = deepcopy(context)
+                preserved.reference_time = anchor
+                result = dict(result)
+                if isinstance(order_result, Mapping):
+                    updated_order = dict(order_result)
+                    updated_order["order_context"] = preserved
+                    result["order_result"] = updated_order
+                else:
+                    result["order_context"] = preserved
 
         # Compiled parent graphs normally expose child graphs as one update. Derive
         # their public boundaries from the final structured state, never from LLM text.

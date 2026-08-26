@@ -1,11 +1,12 @@
 """Interactive CLI for the full, intent, and order processing chains."""
 
 from dataclasses import dataclass, field
+from copy import deepcopy
 import json
 from typing import Callable, List, Optional
 
 from ..context.models import HistoryConversation, OrderContext
-from ..reference_time import resolve_reference_time
+from ..reference_time import resolve_context_reference_time
 from .runners import ChainContext, FullChainRunner, IntentChainRunner, OrderChainRunner
 
 CHAINS = ("full", "intent", "order")
@@ -189,7 +190,10 @@ class IntentCli:
 
     def handle_message(self, message):
         self.session.messages.append(message)
-        self.session.reference_time = resolve_reference_time(None)
+        self.session.reference_time = resolve_context_reference_time(
+            self.session.order_context.reference_time
+        )
+        self.session.order_context.reference_time = self.session.reference_time
         if self.session.mode == "qa": return format_result(None, "qa")
         self.session.history.append_user(message)
         context = ChainContext(self.session.history, self.session.order_context, self.session.reference_time)
@@ -199,11 +203,18 @@ class IntentCli:
         if self.session.chain == "order":
             updated_context = result.get("order_context")
             if updated_context is not None:
+                if not updated_context.reference_time:
+                    updated_context = deepcopy(updated_context)
+                    updated_context.reference_time = self.session.reference_time
                 self.session.order_context = updated_context
         elif self.session.chain == "full":
             order_result = result.get("order_result")
             if order_result and order_result.get("order_context") is not None:
-                self.session.order_context = order_result["order_context"]
+                updated_context = order_result["order_context"]
+                if not updated_context.reference_time:
+                    updated_context = deepcopy(updated_context)
+                    updated_context.reference_time = self.session.reference_time
+                self.session.order_context = updated_context
         output = format_result(result, self.session.chain, self.session.mode)
         summary, metadata = _assistant_summary(result, self.session.chain, self.session.mode)
         self.session.history.append_assistant(summary, metadata)

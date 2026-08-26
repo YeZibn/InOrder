@@ -103,6 +103,19 @@ def test_api_reference_time_is_valid_or_caller_supplied():
     assert graph.states[1]["reference_time"] == "2020-01-02 03:04"
 
 
+def test_api_reuses_context_reference_time_over_request_value():
+    graph = CapturingGraph()
+    client = TestClient(create_app(main_graph=graph))
+    client.post("/api/v2/chat", json={
+        "session_id": "s", "message": "你好",
+        "order_context": {"reference_time": "2020-01-02 03:04"},
+        "reference_time": "2026-08-26 15:00",
+    })
+    state = graph.states[0]
+    assert state["reference_time"] == "2020-01-02 03:04"
+    assert state["order_context"].reference_time == "2020-01-02 03:04"
+
+
 def test_api_rejects_invalid_reference_time_before_graph():
     graph = CapturingGraph()
     client = TestClient(create_app(main_graph=graph))

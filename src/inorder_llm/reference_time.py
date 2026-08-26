@@ -44,4 +44,17 @@ def resolve_reference_time(value: Optional[str]) -> str:
     return candidate
 
 
-__all__ = ["TIMEZONE", "TIME_FORMAT", "ReferenceTimeError", "current_reference_time", "resolve_reference_time"]
+def resolve_context_reference_time(
+    context_value: Optional[str], request_value: Optional[str] = None
+) -> str:
+    """Resolve a conversation anchor, preferring a persisted context value."""
+
+    if context_value is not None and str(context_value).strip():
+        return resolve_reference_time(context_value)
+    return resolve_reference_time(request_value)
+
+
+__all__ = [
+    "TIMEZONE", "TIME_FORMAT", "ReferenceTimeError", "current_reference_time",
+    "resolve_reference_time", "resolve_context_reference_time",
+]

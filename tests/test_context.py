@@ -15,12 +15,18 @@ def test_history_conversation_and_session():
 
 def test_empty_order_context_is_json_compatible():
     data = OrderContext().to_dict()
+    assert data["reference_time"] is None
     assert data["pickup_location"] is None
     assert data["cargo"] == []
     assert data["vehicle_specs"] == []
     assert data["vehicle_source"] is None
     assert data["cargo_profiles"] == []
     assert data["cargo_profile_summary"] is None
+
+
+def test_order_context_serializes_reference_time_and_accepts_legacy_shape():
+    context = OrderContext(reference_time="2026-08-26 15:00")
+    assert context.to_dict()["reference_time"] == "2026-08-26 15:00"
 
 
 def test_order_context_serializes_derived_profiles_without_changing_raw_cargo():
