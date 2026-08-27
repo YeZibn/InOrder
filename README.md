@@ -14,7 +14,22 @@ conda run -n agent python -m pip install -e '.[dev]'
 
 `LLM_REASONING_EFFORT` 可设置为 `low`、`medium` 或 `high`；留空时不向上游发送该可选参数。
 
-`LLM_API_MODE` 可设置为 `chat_completions` 或 `responses`，默认使用 `chat_completions`。`LLM_BASE_URL` 始终填写服务根路径，例如 `https://example.com/v1`，不要把具体 endpoint 写入其中。
+`LLM_PROVIDER` 可设置为 `openai` 或 `deepseek`，未配置时默认为 `openai`。未显式设置 `LLM_BASE_URL` 时，OpenAI 使用 `https://api.openai.com/v1`，DeepSeek 使用 `https://api.deepseek.com`。显式设置时只填写服务根路径，不要把 `/chat/completions` 或 `/responses` 写入其中。
+
+`LLM_API_MODE` 可设置为 `chat_completions` 或 `responses`，默认使用 `chat_completions`。provider 与 API mode 独立组合：DeepSeek 官网可使用 `chat_completions` 请求 `/chat/completions`，或使用 `responses` 请求 `/responses`；OpenAI 同理。
+
+DeepSeek 示例：
+
+```env
+LLM_PROVIDER=deepseek
+LLM_API_KEY=your-deepseek-api-key
+LLM_BASE_URL=https://api.deepseek.com
+LLM_MODEL=deepseek-chat
+LLM_API_MODE=chat_completions
+LLM_REASONING_EFFORT=
+```
+
+API key 只能通过本地环境变量注入，不要写入代码、测试或提交到仓库。修改 `.env` 后需要重启 CLI/API 进程。
 
 `LLM_STREAMING` 控制 CLI 是否实时输出 LLM 增量内容，设置为 `true`、`1`、`yes` 或 `on` 启用；未配置时默认为关闭。流式调用完成后仍会累积完整响应，供意图识别、Rewrite 等结构化解析使用。
 

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from inorder_llm.infrastructure.llm.client import LLMClient
+from inorder_llm.infrastructure.llm.transport import OpenAITransport
 from inorder_llm.infrastructure.llm.config import LLMConfig, load_config
 from inorder_llm.infrastructure.llm.errors import AuthenticationError, ConfigurationError, RateLimitError, TimeoutError
 from inorder_llm.infrastructure.llm.models import ChatMessage
@@ -61,8 +62,9 @@ def test_load_config_and_missing_values():
     with pytest.raises(ConfigurationError):
         load_config({"LLM_API_KEY": "k"})
     assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_REASONING_EFFORT": "high"}).reasoning_effort == "high"
+    assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_REASONING_EFFORT": "max"}).reasoning_effort == "max"
     with pytest.raises(ConfigurationError):
-        load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_REASONING_EFFORT": "max"})
+        load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_REASONING_EFFORT": "xhigh"})
     assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m"}).api_mode == "chat_completions"
     assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_API_MODE": "responses"}).api_mode == "responses"
     assert load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_STREAMING": "true"}).streaming is True
@@ -70,6 +72,113 @@ def test_load_config_and_missing_values():
         load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_API_MODE": "other"})
     with pytest.raises(ConfigurationError):
         load_config({"LLM_API_KEY": "k", "LLM_BASE_URL": "u", "LLM_MODEL": "m", "LLM_STREAMING": "sometimes"})
+
+
+def test_provider_defaults_and_validation():
+    openai = load_config({"LLM_API_KEY": "k", "LLM_MODEL": "m"})
+    assert openai.provider == "openai"
+    assert openai.base_url == "https://api.openai.com/v1"
+    deepseek = load_config({"LLM_API_KEY": "k", "LLM_PROVIDER": "deepseek", "LLM_MODEL": "deepseek-chat"})
+    assert deepseek.provider == "deepseek"
+    assert deepseek.base_url == "https://api.deepseek.com"
+    overridden = load_config({"LLM_API_KEY": "k", "LLM_PROVIDER": "deepseek", "LLM_BASE_URL": "https://gateway.test/v1", "LLM_MODEL": "m"})
+    assert overridden.base_url == "https://gateway.test/v1"
+    with pytest.raises(ConfigurationError):
+        load_config({"LLM_API_KEY": "k", "LLM_MODEL": "m", "LLM_PROVIDER": "azure"})
+
+
+def test_provider_specific_api_key_priority():
+    # Provider-specific key takes priority over shared LLM_API_KEY
+    cfg = load_config({
+        "LLM_PROVIDER": "deepseek",
+        "LLM_API_KEY": "shared-key",
+        "LLM_API_KEY_DEEPSEEK": "deepseek-specific",
+        "LLM_MODEL": "deepseek-v4-flash",
+    })
+    assert cfg.api_key == "deepseek-specific"
+
+    cfg = load_config({
+        "LLM_PROVIDER": "openai",
+        "LLM_API_KEY": "shared-key",
+        "LLM_API_KEY_OPENAI": "openai-specific",
+        "LLM_MODEL": "gpt-4o-mini",
+    })
+    assert cfg.api_key == "openai-specific"
+
+
+def test_provider_api_key_fallback_to_shared():
+    # Falls back to LLM_API_KEY when provider-specific key is absent
+    cfg = load_config({
+        "LLM_PROVIDER": "deepseek",
+        "LLM_API_KEY": "shared-key",
+        "LLM_MODEL": "deepseek-v4-flash",
+    })
+    assert cfg.api_key == "shared-key"
+
+
+def test_provider_api_key_missing_rejected():
+    # Rejects when neither provider-specific key nor fallback is configured
+    with pytest.raises(ConfigurationError):
+        load_config({"LLM_PROVIDER": "deepseek", "LLM_MODEL": "deepseek-v4-flash"})
+    with pytest.raises(ConfigurationError):
+        load_config({"LLM_PROVIDER": "openai", "LLM_MODEL": "gpt-4o-mini"})
+
+
+class _RecordingResource:
+    def __init__(self):
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return response()
+
+
+def _transport_for_resource():
+    transport = OpenAITransport.__new__(OpenAITransport)
+    resource = _RecordingResource()
+    transport._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=resource),
+        responses=resource,
+    )
+    return transport, resource
+
+
+def test_deepseek_chat_completions_request_shape():
+    transport, resource = _transport_for_resource()
+    cfg = config(provider="deepseek", api_mode="chat_completions", reasoning_effort="low")
+    transport.complete([ChatMessage("system", "json"), ChatMessage("user", "hi")], cfg)
+    request = resource.calls[0]
+    assert request["messages"] == [{"role": "system", "content": "json"}, {"role": "user", "content": "hi"}]
+    assert request["reasoning_effort"] == "low"
+    assert "input" not in request and "reasoning" not in request
+
+
+def test_deepseek_responses_request_shape():
+    transport, resource = _transport_for_resource()
+    cfg = config(provider="deepseek", api_mode="responses", reasoning_effort="high")
+    transport.complete([ChatMessage("user", "hi")], cfg)
+    request = resource.calls[0]
+    assert request["input"] == [{"role": "user", "content": "hi"}]
+    assert request["reasoning"] == {"effort": "high"}
+    assert "messages" not in request and "reasoning_effort" not in request
+
+
+def test_deepseek_stream_request_shapes():
+    transport, resource = _transport_for_resource()
+    chat_cfg = config(provider="deepseek", api_mode="chat_completions", reasoning_effort="high")
+    transport.stream([ChatMessage("user", "hi")], chat_cfg)
+    request = resource.calls[0]
+    assert request["stream"] is True
+    assert request["messages"] == [{"role": "user", "content": "hi"}]
+    assert request["reasoning_effort"] == "high"
+
+    resource.calls.clear()
+    responses_cfg = config(provider="deepseek", api_mode="responses", reasoning_effort="low")
+    transport.stream([ChatMessage("user", "hi")], responses_cfg)
+    request = resource.calls[0]
+    assert request["stream"] is True
+    assert request["input"] == [{"role": "user", "content": "hi"}]
+    assert request["reasoning"] == {"effort": "low"}
 
 
 def test_success_normalizes_response_and_messages():

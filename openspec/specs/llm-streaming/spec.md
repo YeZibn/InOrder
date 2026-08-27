@@ -6,8 +6,8 @@
 
 ## Requirements
 
-### Requirement: Unified streaming content
-系统 SHALL 为 Chat Completions 和 Responses 两种 API 提供统一的增量文本事件语义，调用方无需根据 API 模式解析供应商事件格式。
+### Requirement: Stream normalized content across providers
+系统 SHALL 为 Chat Completions 和 Responses 两种 API 提供统一的增量文本事件语义，调用方无需根据 API 模式解析供应商事件格式。系统 SHALL 将 OpenAI 和 DeepSeek 在 Chat Completions 或 Responses 模式下返回的流式事件归一化为统一的增量文本和完成事件；provider 差异不得泄露给上层工作流。
 
 #### Scenario: Chat Completions delta
 - **WHEN** Chat Completions 返回包含 `choices[0].delta.content` 的 SSE 事件
@@ -16,6 +16,16 @@
 #### Scenario: Responses delta
 - **WHEN** Responses 返回 `response.output_text.delta` 事件
 - **THEN** 系统将其 `delta` 内容作为同一种增量文本事件交给调用方
+
+#### Scenario: Stream DeepSeek Chat Completions
+
+- **WHEN** DeepSeek Chat Completions 返回多个 SSE content chunks 并以 `[DONE]` 结束
+- **THEN** 客户端按顺序累积 content，产生统一完成结果和可选 usage
+
+#### Scenario: Stream DeepSeek Responses
+
+- **WHEN** DeepSeek Responses 返回 `response.output_text.delta` 及最终 `response.completed`/`response.incomplete`/`response.failed`
+- **THEN** 客户端按顺序累积 delta，并将最终状态归一化为统一结果或结构化错误
 
 ### Requirement: Complete streaming result
 流式调用 SHALL 按接收顺序累积所有文本增量，并在正常结束后返回与非流式调用兼容的完整 `LLMResponse`。
