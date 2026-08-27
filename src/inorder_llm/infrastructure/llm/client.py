@@ -53,7 +53,7 @@ class LLMClient:
                     if event.event_type in ("response.failed", "failed", "error"):
                         raise UpstreamError("LLM streaming response failed")
                     final_event = event
-                    if event.delta:
+                    if event.event_type == "content_delta" and event.delta:
                         received = True
                         chunks.append(event.delta)
                         if callback is not None:

@@ -289,6 +289,40 @@ def test_stream_retries_before_first_delta():
     assert len(transport.calls) == 2
 
 
+def test_stream_excludes_reasoning_deltas_from_text_and_callback():
+    transport = FakeTransport([
+        ResponsesEvent("response.reasoning_text.delta", "thinking..."),
+        ResponsesEvent("response.output_text.delta", '{"a": '),
+        ResponsesEvent("response.output_text.delta", "1}"),
+        ResponsesEvent("response.completed"),
+    ])
+    deltas = []
+    result = LLMClient(config(), transport=transport).stream([ChatMessage("user", "hi")], deltas.append)
+    assert result.text == '{"a": 1}'
+    assert deltas == ['{"a": ', "1}"]
+
+
+def test_stream_allows_retry_after_reasoning_only_delta():
+    # Reasoning deltas must not count as delivered content:
+    # a retryable error after only reasoning output still retries.
+    class ReasoningThenError:
+        def __iter__(self):
+            yield ResponsesEvent("response.reasoning_text.delta", "thinking...")
+            raise TimeoutError("x")
+    transport = FakeTransport([StreamEvent("ok")], None)
+
+    def stream(messages, config):
+        transport.calls.append((messages, config))
+        if len(transport.calls) == 1:
+            return iter(ReasoningThenError())
+        return iter([StreamEvent("ok")])
+
+    transport.stream = stream
+    result = LLMClient(config(), transport=transport).stream([ChatMessage("user", "hi")])
+    assert result.text == "ok"
+    assert len(transport.calls) == 2
+
+
 def test_stream_does_not_retry_after_delta():
     class BrokenIterator:
         def __iter__(self):
