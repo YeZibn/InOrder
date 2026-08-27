@@ -238,6 +238,21 @@ def test_failed_graph_does_not_append_assistant_summary():
     assert [turn.role for turn in cli.session.history.turns] == ["user"]
 
 
+def test_cli_retry_replays_pending_user_without_duplicate_turn():
+    class RecoveringGraph:
+        def __init__(self): self.calls = []
+        def invoke(self, state):
+            self.calls.append(state)
+            if len(self.calls) == 1: raise RuntimeError("gateway failed")
+            return {"main_intent": "qa", "intent_plan": {"main_intent": "qa", "sub_intents": []}}
+    graph = RecoveringGraph()
+    cli = IntentCli(graph=graph)
+    with pytest.raises(RuntimeError): cli.handle_message("我要运苹果")
+    cli.handle_message("重试")
+    assert graph.calls[1]["message"] == "我要运苹果"
+    assert [turn.role for turn in cli.session.history.turns] == ["user", "assistant"]
+
+
 def test_context_and_conversation_commands_are_read_only_json():
     cli = IntentCli(graph=FakeGraph())
     cli.session.history.append_user("历史输入")

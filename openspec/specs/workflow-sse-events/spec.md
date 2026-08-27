@@ -126,6 +126,18 @@ SSE 事件 SHALL 只暴露面向客户端的阶段摘要、结构化业务结果
 - **WHEN** 工作流超过 Python 服务配置的总执行预算
 - **THEN** 系统发送 `WORKFLOW_TIMEOUT` 错误并关闭 SSE，不发送 `DONE`
 
+### Requirement: Return conversation recovery state
+
+成功结束时 `DONE` 事件 SHALL 返回规范化的会话 `history` 或等价 `history_patch`；发生 `ERROR` 或客户端断开时不得伪造 assistant 内容，调用方可保留 pending user 回合并重试。
+
+#### Scenario: DONE includes recovered history
+- **WHEN** 工作流成功处理包含 pending user 回合的请求
+- **THEN** DONE payload 包含无重复消息的可持久化 history 或 history_patch
+
+#### Scenario: ERROR preserves pending state
+- **WHEN** 工作流在 DONE 前失败
+- **THEN** ERROR payload 不包含 assistant 摘要，客户端可继续使用原 pending history
+
 ### Requirement: Handle client disconnects
 
 客户端断开 SSE 连接后，系统 SHALL 停止向该客户端发布事件，释放本次请求资源，且不得在 Python 服务内保存或恢复未完成工作流。

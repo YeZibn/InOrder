@@ -20,6 +20,8 @@
 
 ## 记录
 
+本次 `recover-incomplete-conversation-turn` 仅调整 API/CLI 会话入口与 SSE history 回写，不修改 LLM prompt 常量。
+
 ### `MAIN_INTENT_SYSTEM_PROMPT`（`intent/resolver.py`）
 
 #### 2026-08-15

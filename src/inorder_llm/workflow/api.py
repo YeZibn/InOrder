@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
 from ..context import HistoryConversation, OrderContext
+from ..context.recovery import ConversationRecovery, prepare_conversation_recovery
 from ..reference_time import ReferenceTimeError, resolve_context_reference_time
 from .adapter import WorkflowEventAdapter
 from .events import error_event
@@ -85,10 +86,13 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
             )
             order_context = deepcopy(order_context)
             order_context.reference_time = resolved_reference_time
+            history = _history(payload.history)
+            recovery = prepare_conversation_recovery(history, payload.message)
+            state_history = recovery.history
             state = {
                 "session_id": payload.session_id,
-                "message": payload.message,
-                "history": _history(payload.history),
+                "message": recovery.message,
+                "history": state_history,
                 "order_context": order_context,
                 "reference_time": resolved_reference_time,
                 "deadline_at": time.monotonic() + float(os.getenv("WORKFLOW_TIMEOUT_SECONDS", "90")),
@@ -101,6 +105,8 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
                 for event in WorkflowEventAdapter(resolve_graph()).events(state):
                     if await request.is_disconnected():
                         return
+                    if event.type.value == "DONE":
+                        event = _with_recovery_history(event, recovery, state_history)
                     yield event.frame()
             except BaseException as exc:
                 yield error_event(exc).frame()
@@ -108,6 +114,33 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     return app
+
+
+def _with_recovery_history(event, recovery: ConversationRecovery, history: HistoryConversation):
+    """Attach a replaceable history snapshot to a successful DONE event."""
+    from .events import EventType, WorkflowEvent
+    if event.type is not EventType.DONE:
+        return event
+    result = event.payload.get("result", {})
+    assistant = ""
+    if isinstance(result, dict):
+        order = result.get("order_result") or result
+        summary = order.get("order_summary") if isinstance(order, dict) else None
+        if isinstance(summary, dict):
+            assistant = str(summary.get("user_message") or summary.get("summary") or "")
+        if not assistant:
+            intent = result.get("intent_result", {}).get("main_intent") if isinstance(result.get("intent_result"), dict) else None
+            assistant = "已完成意图识别：" + str(intent or "未知")
+    completed = HistoryConversation()
+    completed.turns = list(history.turns)
+    if not completed.turns or completed.turns[-1].role != "user" or completed.turns[-1].content != recovery.message:
+        completed.append_user(recovery.message)
+    if assistant:
+        completed.append_assistant(assistant, {"recovered": recovery.recovered})
+    payload = dict(event.payload)
+    payload["history"] = completed.to_dict()
+    payload["history_recovered"] = recovery.recovered
+    return WorkflowEvent(EventType.DONE, payload)
 
 
 __all__ = ["create_app"]

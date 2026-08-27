@@ -99,6 +99,22 @@ def test_api_valid_request_and_validation_error():
     assert bad.status_code == 422
 
 
+def test_api_done_returns_recovered_history_for_pending_user():
+    graph = FakeGraph({"intent_result": {"main_intent": "qa"}, "order_graph_entered": False})
+    client = TestClient(create_app(main_graph=graph))
+    response = client.post("/api/v2/chat", json={
+        "session_id": "s", "message": "从温州到上海",
+        "history": {"turns": [{"role": "user", "content": "我要运苹果"}]},
+    })
+    done = frames(response.text)[-1]
+    assert done["type"] == "DONE"
+    assert done["payload"]["history_recovered"] is True
+    turns = done["payload"]["history"]["turns"]
+    assert turns[-2]["role"] == "user"
+    assert turns[-2]["content"] == "我要运苹果\n从温州到上海"
+    assert turns[-1]["role"] == "assistant"
+
+
 def test_api_serves_same_origin_memory_test_page():
     client = TestClient(create_app(main_graph=FakeGraph()))
     response = client.get("/")

@@ -160,3 +160,15 @@ CLI SHALL 将 full 链路路由到 MainGraph；intent 和 order 链路 SHALL 继
 #### Scenario: Independent child chain remains available
 - **WHEN** 当前链路为 `intent` 或 `order`
 - **THEN** CLI 直接调用对应子图，不要求经过 MainGraph
+
+### Requirement: Recover incomplete conversation turns
+
+CLI 在执行新消息前 SHALL 检查当前 `HistoryConversation` 的末尾是否存在未完成 user 回合；存在时 SHALL 按恢复规则重放或与新消息合并，成功后更新本地 history，失败时保留 pending 状态。
+
+#### Scenario: Retry pending turn
+- **WHEN** 上一轮处理失败且 history 末尾只有 user 消息，用户输入“重试”
+- **THEN** CLI 只重放该 user 消息并在成功后追加 assistant 摘要
+
+#### Scenario: Merge pending turn with new input
+- **WHEN** history 末尾存在 pending user 消息且用户输入新的业务补充
+- **THEN** CLI 按原始顺序合并两部分内容，只执行一次工作流

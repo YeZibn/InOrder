@@ -79,6 +79,8 @@ curl -N -X POST http://localhost:8000/api/v2/chat \
 
 启动 `inorder-api` 后也可以直接访问 `http://localhost:8000/` 打开内置测试前端。页面使用浏览器内存保存 `session_id`、`history` 和完整 `order_context`，通过 `fetch + SSE` 展示意图识别、订单处理、货物画像、车型处理及最终结果，适合连续测试“再加货物”“修改车型”等多轮输入。SSE 阶段会转换为“正在理解您的需求…”等面向用户的小提示，并在最终结果中展示订单摘要和待补充字段；刷新或点击“清空会话”会丢弃当前内存状态。
 
+当 history 末尾存在未收到 assistant 回复的 user 消息时，API/CLI 会在入口自动识别为 pending turn：输入“重试”或“继续”会重放该消息，输入新的业务内容则与 pending 消息合并处理。成功响应的 SSE `DONE` 事件会返回恢复后的 `history`，客户端应使用它替换本地快照；失败时不伪造 assistant 回复，保留 pending 消息供后续重试。
+
 订单工作流完成车型处理后会执行确定性的完整性检查。最小订单默认要求装货地、卸货地、货物名称、重量或数量至少一个以及送达时间；缺失时状态为 `incomplete`，`DONE` 结果会附带 `order_summary.missing_required` 和 `order_summary.next_prompt`。车型不作为默认必填字段，因为系统可以根据货物画像进行估算。
 
 `reference_time` 是本次用户消息的时间锚点，格式为 `YYYY-MM-DD HH:MM`。调用方传入时优先使用；未传入时，Python 在 CLI 消息入口或 HTTP 请求入口按 `Asia/Shanghai` 当前时间生成一次。该值写入本次工作流 state，Rewrite、Extract 及格式修复重试均复用，不会在节点或重试中重新取时间。

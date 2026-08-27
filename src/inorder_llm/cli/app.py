@@ -6,6 +6,7 @@ import json
 from typing import Callable, List, Optional
 
 from ..context.models import HistoryConversation, OrderContext
+from ..context.recovery import prepare_conversation_recovery
 from ..reference_time import resolve_context_reference_time
 from .runners import ChainContext, FullChainRunner, IntentChainRunner, OrderChainRunner
 
@@ -210,11 +211,17 @@ class IntentCli:
         )
         self.session.order_context.reference_time = self.session.reference_time
         if self.session.mode == "qa": return format_result(None, "qa")
-        self.session.history.append_user(message)
-        context = ChainContext(self.session.history, self.session.order_context, self.session.reference_time)
+        original_history = self.session.history
+        recovery = prepare_conversation_recovery(original_history, message)
+        working_history = recovery.history
+        working_history.append_user(recovery.message)
+        # Persist the user turn before invoking the graph. If the request
+        # fails, this deliberately remains a pending turn for the next retry.
+        self.session.history = working_history
+        context = ChainContext(working_history, self.session.order_context, self.session.reference_time)
         runner = {"full": self.full_runner, "intent": self.intent_runner, "order": self.order_runner}[self.session.chain]
         if runner is None: return "当前链路未配置，无法识别。"
-        result = runner.run(message, context)
+        result = runner.run(recovery.message, context)
         if self.session.chain == "order":
             updated_context = result.get("order_context")
             if updated_context is not None:
@@ -232,7 +239,8 @@ class IntentCli:
                 self.session.order_context = updated_context
         output = format_result(result, self.session.chain, self.session.mode)
         summary, metadata = _assistant_summary(result, self.session.chain, self.session.mode)
-        self.session.history.append_assistant(summary, metadata)
+        working_history.append_assistant(summary, metadata)
+        self.session.history = working_history
         return output
 
     def run(self):

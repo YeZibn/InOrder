@@ -6,7 +6,7 @@
 ## Requirements
 ### Requirement: Conversation history
 
-系统 SHALL 提供会话历史，保存有序的 user、assistant 和 system 对话回合，并支持获取最近回合、转换为 LLM 消息格式和稳定序列化。CLI 处理成功后写入的 assistant 回合 SHALL 是精简摘要，不包含完整调试输出。
+系统 SHALL 提供会话历史，保存有序的 user、assistant 和 system 对话回合，并支持获取最近回合、转换为 LLM 消息格式和稳定序列化。系统 SHALL 支持识别未完成 user 回合并在恢复成功后提供可持久化的完整回合快照或补丁。CLI 处理成功后写入的 assistant 回合 SHALL 是精简摘要，不包含完整调试输出。
 
 #### Scenario: Append and retrieve turns
 
@@ -32,6 +32,10 @@
 
 - **WHEN** graph 或 reducer 处理失败
 - **THEN** history 不追加本轮 assistant 摘要
+
+#### Scenario: Recover an incomplete turn
+- **WHEN** history 末尾存在未收到 assistant 回复的 user 回合且下一次请求处理成功
+- **THEN** 返回的 history 快照包含合并后的 user 回合和 assistant 摘要
 
 ### Requirement: Active order context
 
@@ -97,4 +101,3 @@
 
 - **WHEN** 对订单实体列表执行合并
 - **THEN** 系统只返回上下文数据，不触发外部订单或数据库调用
-
