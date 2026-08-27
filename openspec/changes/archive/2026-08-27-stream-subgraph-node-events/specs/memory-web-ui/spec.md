@@ -1,27 +1,4 @@
-# memory-web-ui Specification
-
-## Purpose
-
-为 InOrder 提供一个无需前端构建和外部持久化的浏览器测试界面，用于验证 SSE 工作流阶段展示及多轮订单上下文传递。
-## Requirements
-### Requirement: Provide an in-memory workflow test page
-
-系统 SHALL 在 API 服务根路径提供可访问的 InOrder 测试页面。页面 SHALL 允许用户输入消息、触发一次工作流请求并展示当前会话的消息列表。
-
-#### Scenario: Open test page
-
-- **WHEN** 用户访问 API 服务根路径 `/`
-- **THEN** 系统返回可在现代浏览器直接运行的测试页面，不要求 Node.js 或前端构建步骤
-
-#### Scenario: Send a message
-
-- **WHEN** 用户输入非空消息并点击发送
-- **THEN** 页面向 `/api/v2/chat` 发送包含 `session_id`、`message`、`history` 和 `order_context` 的 JSON 请求
-
-#### Scenario: Reject empty message locally
-
-- **WHEN** 用户未输入消息并尝试发送
-- **THEN** 页面不发起网络请求，并提示用户输入消息
+## MODIFIED Requirements
 
 ### Requirement: Consume and display SSE workflow events
 
@@ -85,37 +62,3 @@
 
 - **WHEN** 服务端发送 `ERROR`
 - **THEN** 页面展示错误消息和阶段，并结束当前消息的加载状态，不伪造成功结果
-
-### Requirement: Preserve multi-turn state in browser memory
-
-页面 SHALL 在当前页面生命周期内保存 `history`、完整 `order_context`、`reference_time` 和 `session_id`，并在下一次请求中复用；刷新或关闭页面后允许丢失这些数据。
-
-#### Scenario: Continue a conversation
-
-- **WHEN** 第一轮请求返回订单上下文后用户发送第二轮消息
-- **THEN** 第二轮请求携带上一轮最新的 `history` 和 `order_context`，包括已保存的 `reference_time`
-
-#### Scenario: Keep concise assistant history
-
-- **WHEN** 一轮工作流正常完成
-- **THEN** 页面向内存 history 追加用户消息和精简 assistant 摘要，不将完整 SSE JSON 写入对话历史
-
-#### Scenario: Clear in-memory session
-
-- **WHEN** 用户点击清空会话
-- **THEN** 页面清空消息、history 和 order_context，并恢复默认 session 标识
-
-### Requirement: Inspect current session state
-
-页面 SHALL 提供查看当前 `order_context` 和 `history` 的调试区域。
-
-#### Scenario: Inspect order context
-
-- **WHEN** 用户查看订单上下文面板
-- **THEN** 页面展示当前可序列化的完整 `order_context` JSON
-
-#### Scenario: Inspect conversation history
-
-- **WHEN** 用户查看历史面板
-- **THEN** 页面展示当前内存中的有序 turns JSON
-

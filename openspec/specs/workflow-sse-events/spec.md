@@ -3,9 +3,7 @@
 ## Purpose
 
 为外部客户端提供稳定的 InOrder 工作流进度流，使调用方能够通过标准 SSE 事件观察意图识别、订单解析和上下文更新的阶段，并可靠获得最终订单上下文或错误。
-
 ## Requirements
-
 ### Requirement: Provide an SSE chat endpoint
 
 系统 SHALL 提供 `POST /api/v2/chat` 接口，并在请求协商 `Accept: text/event-stream` 时以 `text/event-stream` 返回工作流事件；同时 SHALL 在 API 服务根路径提供本地测试页面，该页面使用同源请求调用该接口。Python SHALL 从请求中的 `order_context.reference_time`、请求级 `reference_time` 或当前 `Asia/Shanghai` 时间按优先级确定一个会话时间锚点，将其写入工作流 state，并在更新后的 `OrderContext` 快照中返回。
@@ -68,19 +66,27 @@
 
 ### Requirement: Emit order workflow lifecycle events
 
-订单主意图进入订单子图时，系统 SHALL 对外只发送用户可理解的业务阶段：识别用户意图、处理订单、生成货物画像（若执行）和处理车型（若执行）。rewrite、extract、上下文合并等内部步骤 SHALL 归属于“处理订单”阶段，不得作为独立的公开 `THINKING_STEP`。
+订单主意图进入订单子图时，系统 SHALL 对外发送识别用户意图、处理订单、生成货物画像（若执行）和处理车型（若执行）等公开业务阶段，并可在这些阶段内按子图节点完成发送更细粒度的 `THINKING_STEP`。节点事件必须按实际完成顺序出现；不得暴露 prompt、原始模型响应或内部思维。既有 `THINKING_START`、`THINKING_DONE`、`DONE` 和上下文事件语义保持不变。
 
 #### Scenario: Stream an order workflow with optional stages
-- **WHEN** 主意图识别结果为 `order`
-- **THEN** 事件依次覆盖识别用户意图、处理订单，以及实际执行的货物画像和车型处理阶段，随后发送思考完成和终态事件
+
+- **WHEN** 主意图识别结果为 `order` 且订单子图执行多个节点
+- **THEN** 事件依次包含开始事件、意图子图及订单子图已完成节点对应的 `THINKING_STEP`，随后发送实际执行阶段的上下文更新（若有）、思考完成和终态事件
+
+#### Scenario: Publish each completed node once
+
+- **WHEN** 子图节点完成并返回状态更新
+- **THEN** 系统发送一个对应的节点完成进度事件，事件包含递增 `sequence`，同一节点不得因父图聚合再次重复发送
 
 #### Scenario: Hide order implementation details
-- **WHEN** 订单子图执行 rewrite、extract 或 update_context 节点
-- **THEN** SSE 流不得发送这些内部节点名称或独立阶段事件
+
+- **WHEN** 订单子图执行 rewrite、extract、update_context 或其他内部节点
+- **THEN** SSE 可以用稳定节点标识支持客户端映射，但不得把内部调试信息、模型输出或隐藏思维放入 payload
 
 #### Scenario: Stream a minimal order workflow
+
 - **WHEN** 订单子图未启用货物画像或车型处理节点
-- **THEN** 系统只发送实际执行阶段对应的 `THINKING_STEP`，不发送虚假的阶段事件
+- **THEN** 系统只发送实际执行的节点和公开阶段事件，不发送虚假的可选节点事件
 
 ### Requirement: Stream the QA terminal branch
 
@@ -145,3 +151,4 @@ SSE 事件 SHALL 只暴露面向客户端的阶段摘要、结构化业务结果
 #### Scenario: Disconnect during execution
 - **WHEN** 客户端在工作流尚未完成时断开连接
 - **THEN** 系统停止后续事件消费；后续是否重新发起请求由调用方决定
+

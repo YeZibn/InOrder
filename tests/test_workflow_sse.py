@@ -32,6 +32,31 @@ class StreamingGraph(FakeGraph):
         yield {"vehicle_resolution": {"vehicle_resolution": {"vehicle_type": "厢式"}}}
 
 
+class NestedStreamingGraph(FakeGraph):
+    def stream(self, state, stream_mode="updates", subgraphs=False, version="v1"):
+        assert stream_mode == "updates"
+        assert subgraphs is True
+        records = [
+            (("intent_subgraph:run",), {"main_intent": {"main_intent": "order"}}),
+            (("order_subgraph:run",), {"rewrite": {"rewrite_result": {"rewritten_text": "x"}}}),
+            (("order_subgraph:run",), {"extract": {"entities": []}}),
+            (("order_subgraph:run",), {"update_context": {"order_context_updated": True}}),
+            (("order_subgraph:run",), {"cargo_profile": {"cargo_profile_updated": True}}),
+            (("order_subgraph:run",), {"vehicle_resolution": {"vehicle_resolution": {"vehicle_type": "厢式"}}}),
+            ((), {"order_subgraph": {"order_graph_entered": True}}),
+        ]
+        for namespace, data in records:
+            yield (namespace, data)
+
+
+class NestedV2StreamingGraph(FakeGraph):
+    def stream(self, state, stream_mode="updates", subgraphs=False, version="v2"):
+        assert subgraphs is True
+        yield {"type": "updates", "ns": ["order_subgraph:run"], "data": {"rewrite": {"rewrite_result": {"rewritten_text": "x"}}}}
+        yield {"type": "updates", "ns": ["order_subgraph:run"], "data": {"extract": {"entities": []}}}
+        yield {"type": "updates", "ns": [], "data": {"order_subgraph": {"order_graph_entered": True}}}
+
+
 def frames(text):
     return [json.loads(line[6:]) for line in text.splitlines() if line.startswith("data: ")]
 
@@ -89,6 +114,22 @@ def test_adapter_exposes_only_business_stages_for_streaming_graph():
     assert all(step["stage"] in {"intent", "order", "cargo_profile", "vehicle"} for step in steps)
 
 
+def test_adapter_emits_nested_child_node_completion_events_in_order():
+    events = list(WorkflowEventAdapter(NestedStreamingGraph()).events({"session_id": "s"}))
+    steps = [event.payload for event in events if event.type == EventType.THINKING_STEP]
+    assert [step["node"] for step in steps] == ["main_intent", "rewrite", "extract", "update_context", "cargo_profile", "vehicle_resolution"]
+    assert [step["sequence"] for step in steps] == list(range(1, 7))
+    assert all(step["status"] == "completed" for step in steps)
+    assert steps[1]["title"] == "订单语义整理完成"
+
+
+def test_adapter_parses_v2_nested_updates_and_keeps_terminal_events():
+    events = list(WorkflowEventAdapter(NestedV2StreamingGraph()).events({"session_id": "s"}))
+    steps = [event.payload for event in events if event.type == EventType.THINKING_STEP and "node" in event.payload]
+    assert [step["node"] for step in steps] == ["rewrite", "extract"]
+    assert [event.type for event in events[-2:]] == [EventType.THINKING_DONE, EventType.DONE]
+
+
 def test_api_valid_request_and_validation_error():
     client = TestClient(create_app(main_graph=FakeGraph()))
     response = client.post("/api/v2/chat", json={"session_id": "s", "message": "你好"})
@@ -143,6 +184,15 @@ def test_memory_page_maps_sse_events_to_friendly_progress_hints():
     assert "正在处理您的订单…" in page
     assert "normalizeStage(payload.stage)" in page
     assert "|| 'unknown'" in page
+
+
+def test_memory_page_maps_node_events_and_appends_same_stage_progress():
+    page = (Path(__file__).parents[1] / "frontend" / "index.html").read_text(encoding="utf-8")
+    for hint in ("主意图识别完成", "订单语义整理完成", "订单字段提取完成", "订单信息检查完成"):
+        assert hint in page
+    assert "const NODE_HINTS" in page
+    assert "Boolean(p.node)" in page
+    assert "appendPrevious" in page
 
 
 def test_memory_page_does_not_use_sse_event_names_as_display_titles():

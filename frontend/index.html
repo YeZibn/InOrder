@@ -94,6 +94,19 @@
         update_context: 'order',
         vehicle_resolution: 'vehicle'
       };
+      const NODE_HINTS = {
+        main_intent: '主意图识别完成',
+        sub_intent: '子意图解析完成',
+        build_plan: '意图处理计划完成',
+        validate_plan: '意图信息校验完成',
+        rewrite: '订单语义整理完成',
+        extract: '订单字段提取完成',
+        update_context: '订单信息更新完成',
+        cargo_profile: '货物画像生成完成',
+        vehicle_resolution: '车型匹配完成',
+        order_completeness: '订单信息检查完成',
+        finalize: '订单处理结果整理完成'
+      };
       const normalizeStage = stage => {
         const value = String(stage || '').trim().toLowerCase();
         return STAGE_HINTS[value] ? value : (STAGE_ALIASES[value] || 'unknown');
@@ -102,18 +115,18 @@
         const type = String(event?.type || '');
         const payload = event?.payload || {};
         if (type === 'THINKING_START') return STAGE_HINTS.start;
-        if (type === 'THINKING_STEP') return STAGE_HINTS[normalizeStage(payload.stage)] || '正在处理您的订单…';
+        if (type === 'THINKING_STEP') return NODE_HINTS[String(payload.node || '').toLowerCase()] || STAGE_HINTS[normalizeStage(payload.stage)] || '正在处理您的订单…';
         if (type === 'CREATE_ORDER_CONTEXT') return '订单信息已更新';
         if (type === 'THINKING_DONE' || type === 'DONE') return STAGE_HINTS.complete;
         if (type === 'ERROR') return payload.message || '处理失败，请稍后重试';
         return null;
       };
-      const setProgressHint = (liveBox, hint, terminal=false) => {
+      const setProgressHint = (liveBox, hint, terminal=false, appendPrevious=false) => {
         if (!liveBox || !hint) return;
         const current = liveBox.querySelector('.progress-current');
         const history = liveBox.querySelector('.progress-history');
         if (!current || !history) { liveBox.querySelector('.bubble-content').textContent = hint; return; }
-        if (current.textContent && current.textContent !== hint && !terminal) {
+        if (current.textContent && !terminal && (appendPrevious || current.textContent !== hint)) {
           const completed = document.createElement('div');
           completed.className = 'progress-done';
           completed.textContent = current.textContent;
@@ -132,7 +145,7 @@
       const addEvent = (event, liveBox) => {
         const p = event.payload || {};
         const hint = friendlyHint(event);
-        if (event.type === 'THINKING_START' || event.type === 'THINKING_STEP') { if (liveBox) setProgressHint(liveBox, hint); else addBubble('system','处理中',hint); }
+        if (event.type === 'THINKING_START' || event.type === 'THINKING_STEP') { if (liveBox) setProgressHint(liveBox, hint, false, event.type === 'THINKING_STEP' && Boolean(p.node)); else addBubble('system','处理中',hint); }
         else if (event.type === 'CREATE_ORDER_CONTEXT') { state.order_context = p.order_context || state.order_context; renderState(); if (liveBox) setProgressHint(liveBox, hint); }
         else if (event.type === 'DONE') { const result=p.result || {}; state.last_result=result; const order=result.order_result || {}; const orderSummary=getOrderSummary(result); const userMessage=getOrderUserMessage(result); if (order && order.order_context) state.order_context=order.order_context; if (p.history) { state.history=p.history; state.history_from_server=true; } if (orderSummary) { $('summary').textContent=orderSummary.user_message || orderSummary.summary || '订单已解析'; } $('result').textContent=pretty(result); renderState(); if (liveBox) setProgressHint(liveBox, hint, true); if (userMessage && (!liveBox || liveBox.dataset.summaryAdded !== 'true')) { if (liveBox) liveBox.dataset.summaryAdded='true'; addBubble('assistant','InOrder',userMessage); state.messages.push({role:'assistant',content:userMessage}); } }
         else if (event.type === 'ERROR') { if (liveBox) { liveBox.classList.add('error'); setProgressHint(liveBox, hint, true); } else addBubble('system error','错误',hint); }

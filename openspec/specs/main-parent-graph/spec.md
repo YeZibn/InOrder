@@ -3,9 +3,7 @@
 ## Purpose
 
 为 InOrder 提供一个真正的 LangGraph 父图，统一编排意图识别子图与订单处理子图，并在不同主意图之间进行可观测、可测试的状态路由。
-
 ## Requirements
-
 ### Requirement: Provide a main parent graph
 
 系统 SHALL 提供一个 MainGraph 作为 full 链路入口，并以现有意图图和订单处理图作为可复用子图参与执行。MainGraph SHALL 在执行过程中发布面向调用方的工作流阶段事件，但不得改变既有路由结果和同步结果结构。
@@ -48,16 +46,25 @@ MainGraph SHALL 将子图结果汇总为现有 full CLI 可消费的 `intent_res
 
 ### Requirement: Publish parent workflow lifecycle
 
-MainGraph SHALL 为 full 工作流提供稳定的公开生命周期：开始、识别用户意图、处理订单、可选货物画像、可选车型处理、完成或错误。事件内容 SHALL 由父图路由和子图公开结果派生，不得暴露内部节点名称、prompt、原始 LLM 输出或内部思维内容。
+MainGraph SHALL 为 full 工作流提供稳定的公开生命周期：开始、识别用户意图、订单子图中实际完成的节点进度、可选货物画像、可选车型处理、完成或错误。事件内容 SHALL 由父图路由和子图状态更新派生，不得复制子图节点实现，也不得暴露 prompt、原始 LLM 输出或内部思维。
 
 #### Scenario: Order route publishes business lifecycle
-- **WHEN** MainGraph 路由到订单子图并完成订单处理
-- **THEN** 事件观察者可按顺序看到 `THINKING_START`、识别用户意图、处理订单、可选画像/车型阶段、可选 `CREATE_ORDER_CONTEXT`、`THINKING_DONE` 和 `DONE`
+
+- **WHEN** MainGraph 路由到订单子图并执行其节点
+- **THEN** 事件观察者可按实际顺序看到 `THINKING_START`、意图及订单子图节点完成对应的公开 `THINKING_STEP`、可选 `CREATE_ORDER_CONTEXT`、`THINKING_DONE` 和 `DONE`
 
 #### Scenario: Internal order nodes are not public stages
+
 - **WHEN** 订单子图执行 rewrite、extract 或 update_context
-- **THEN** 事件观察者只能看到聚合后的处理订单阶段，不能依赖这些内部节点名称
+- **THEN** 事件观察者可以收到安全的节点完成进度，但不能看到 prompt、原始模型输出或隐藏思维
+
+#### Scenario: Parent observes nested updates without changing execution
+
+- **WHEN** 父图通过流式观察子图更新
+- **THEN** 父图只转发节点完成状态并汇总既有结果，不复制、重排或改变子图内部节点执行顺序
 
 #### Scenario: QA route publishes lifecycle
-- **WHEN** MainGraph 路由到 QA 终止分支
-- **THEN** 事件观察者可看到 `THINKING_START`、意图识别阶段、`THINKING_DONE` 和 `DONE`，且不会看到订单上下文事件
+
+- **WHEN** 主意图为 `qa` 并进入终止分支
+- **THEN** 系统只发送开始、意图识别、完成和终态事件，不发送订单子图节点或订单上下文事件
+

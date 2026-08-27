@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator, Mapping
 from copy import deepcopy
+import inspect
 import time
 from typing import Any
 
@@ -19,6 +20,23 @@ _STAGE_TEXT = {
     "update_context": "处理订单",
     "cargo_profile": "生成货物画像",
     "vehicle_resolution": "处理车型",
+}
+
+# Node-level titles are deliberately static and user-facing.  The node name is
+# included as a stable machine field, but is never used as display text by the
+# browser.
+_NODE_TEXT = {
+    "main_intent": ("intent", "主意图识别完成"),
+    "sub_intent": ("intent", "子意图解析完成"),
+    "build_plan": ("intent", "意图处理计划完成"),
+    "validate_plan": ("intent", "意图信息校验完成"),
+    "finalize": ("order", "订单处理结果整理完成"),
+    "rewrite": ("order", "订单语义整理完成"),
+    "extract": ("order", "订单字段提取完成"),
+    "update_context": ("order", "订单信息更新完成"),
+    "cargo_profile": ("cargo_profile", "货物画像生成完成"),
+    "vehicle_resolution": ("vehicle", "车型匹配完成"),
+    "order_completeness": ("order", "订单信息检查完成"),
 }
 
 _PUBLIC_STAGES = {"intent", "order", "cargo_profile", "vehicle"}
@@ -39,22 +57,62 @@ class WorkflowEventAdapter:
         yield WorkflowEvent(EventType.THINKING_START, {"title": "开始处理", "stage": "start"})
         result: dict[str, Any] | None = None
         emitted = set()
+        emitted_nodes = set()
+        nested_seen = False
+        sequence = 0
         try:
             stream = getattr(self.graph, "stream", None)
             if callable(stream):
                 # Consume updates to retain synchronous final semantics while observing boundaries.
-                for update in stream(dict(state), stream_mode="updates"):
+                stream_kwargs = {"stream_mode": "updates"}
+                # Compatibility fakes and older graph wrappers may not expose
+                # the subgraphs argument.  Real LangGraph graphs do, and this
+                # is what gives us the child-node boundaries.
+                try:
+                    parameters = inspect.signature(stream).parameters
+                    if "subgraphs" in parameters or any(
+                        parameter.kind is inspect.Parameter.VAR_KEYWORD
+                        for parameter in parameters.values()
+                    ):
+                        stream_kwargs["subgraphs"] = True
+                    if "version" in parameters:
+                        stream_kwargs["version"] = "v2"
+                except (TypeError, ValueError):
+                    pass
+                for update in stream(dict(state), **stream_kwargs):
                     self._check_deadline(state)
-                    if not isinstance(update, Mapping):
+                    namespace, data = self._stream_update(update)
+                    if not isinstance(data, Mapping):
                         continue
-                    for node, value in update.items():
-                        node = str(node)
-                        public = self._public_stage(node, value)
-                        if public and public[0] not in emitted:
-                            emitted.add(public[0])
-                            yield self._step(public[0], public[1], len(emitted))
+                    is_nested = bool(namespace)
+                    nested_seen = nested_seen or is_nested
+                    for node, value in data.items():
+                        node = self._node_name(node)
+                        if is_nested:
+                            public = self._public_node(node)
+                            node_key = (namespace, node)
+                            if public and node_key not in emitted_nodes:
+                                emitted_nodes.add(node_key)
+                                emitted.add(public[0])
+                                sequence += 1
+                                yield self._step(public[0], public[1], sequence, node=node)
+                        elif not nested_seen:
+                            # Legacy graph wrappers expose only parent updates;
+                            # retain the previous aggregate-stage behavior.
+                            public = self._public_stage(node, value)
+                            if public and public[0] not in emitted:
+                                emitted.add(public[0])
+                                sequence += 1
+                                yield self._step(public[0], public[1], sequence)
                         if isinstance(value, Mapping):
                             result = {**(result or {}), **value}
+                        elif not is_nested:
+                            result = {**(result or {}), node: value}
+                    # v2/v1 child updates can expose the state directly rather
+                    # than nested under a node key. Preserve those fields for
+                    # final-result compatibility without exposing them in SSE.
+                    if is_nested and not any(isinstance(value, Mapping) for value in data.values()):
+                        result = {**(result or {}), **data}
                 if result is None:
                     result = dict(self.graph.invoke(dict(state)))
             else:
@@ -86,19 +144,23 @@ class WorkflowEventAdapter:
         # Compiled parent graphs normally expose child graphs as one update. Derive
         # their public boundaries from the final structured state, never from LLM text.
         if "intent" not in emitted and "intent_subgraph" not in emitted:
-            yield self._step("intent", "识别用户意图", len(emitted) + 1)
+            sequence += 1
+            yield self._step("intent", "识别用户意图", sequence)
             emitted.add("intent")
         if result.get("order_graph_entered"):
             order_result = result.get("order_result") or result
             if "order" not in emitted:
                 emitted.add("order")
-                yield self._step("order", "处理订单", len(emitted))
+                sequence += 1
+                yield self._step("order", "处理订单", sequence)
             if order_result.get("cargo_profile_updated") and "cargo_profile" not in emitted:
                 emitted.add("cargo_profile")
-                yield self._step("cargo_profile", "生成货物画像", len(emitted))
+                sequence += 1
+                yield self._step("cargo_profile", "生成货物画像", sequence)
             if order_result.get("vehicle_resolution") and "vehicle" not in emitted:
                 emitted.add("vehicle")
-                yield self._step("vehicle", "处理车型", len(emitted))
+                sequence += 1
+                yield self._step("vehicle", "处理车型", sequence)
         if result.get("order_graph_entered"):
             order_result = result.get("order_result") or result
             context = order_result.get("order_context")
@@ -109,8 +171,37 @@ class WorkflowEventAdapter:
         yield WorkflowEvent(EventType.DONE, {"result": self._safe_result(result), "session_id": state.get("session_id")})
 
     @staticmethod
-    def _step(stage: str, title: str, sequence: int) -> WorkflowEvent:
-        return WorkflowEvent(EventType.THINKING_STEP, {"stage": stage, "title": title, "sequence": sequence})
+    def _step(stage: str, title: str, sequence: int, node: str | None = None) -> WorkflowEvent:
+        payload = {"stage": stage, "title": title, "sequence": sequence}
+        if node is not None:
+            payload.update({"node": node, "status": "completed"})
+        return WorkflowEvent(EventType.THINKING_STEP, payload)
+
+    @staticmethod
+    def _stream_update(update: Any) -> tuple[tuple[str, ...], Any]:
+        """Normalize LangGraph v1/v2 nested stream records."""
+        # v2: {"type": "updates", "ns": (...), "data": {...}}
+        if isinstance(update, Mapping) and "data" in update and "ns" in update:
+            namespace = update.get("ns") or ()
+            if isinstance(namespace, str):
+                namespace = (namespace,)
+            return tuple(str(item) for item in namespace), update.get("data")
+        # v1 with subgraphs=True: (namespace, data)
+        if isinstance(update, tuple) and len(update) == 2 and isinstance(update[0], (tuple, list)):
+            return tuple(str(item) for item in update[0]), update[1]
+        return (), update
+
+    @staticmethod
+    def _node_name(node: Any) -> str:
+        value = str(node)
+        # Namespaces carry an opaque run id after a colon; node keys normally do
+        # not, but stripping it keeps compatibility with wrappers that flatten
+        # the namespace into the key.
+        return value.split(":", 1)[0]
+
+    @staticmethod
+    def _public_node(node: str):
+        return _NODE_TEXT.get(node)
 
     @staticmethod
     def _public_stage(node: str, value: Any):
