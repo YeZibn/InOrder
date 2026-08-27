@@ -3,7 +3,7 @@ from .models import IntentPlan, IntentStep
 from .resolver import IntentPlanningError
 
 MAIN_INTENTS = frozenset(("order", "qa"))
-ORDER_SUB_INTENTS = frozenset(("create_order", "modify_draft", "query_history_order"))
+ORDER_SUB_INTENTS = frozenset(("create_order", "modify_draft"))
 
 
 class IntentPlanValidationError(IntentPlanningError):

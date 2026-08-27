@@ -239,7 +239,7 @@ def test_completeness_node_runs_after_vehicle_resolution_and_returns_summary():
         pickup_location={"city": "温州"},
         dropoff_location={"city": "上海"},
         cargo=[{"name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}],
-        delivery_time={"context": "new_order", "start": "2026-08-28T10:00:00"},
+        delivery_time={"start": "2026-08-28T10:00:00"},
     )
     result = build_order_processing_graph(rewrite, extractor).invoke(_state(context=context))
     assert result["order_summary"].status == "complete"

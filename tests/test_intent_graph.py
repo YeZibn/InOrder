@@ -19,14 +19,11 @@ class RecordingModel:
 
 
 def test_compiled_graph_order_executes_both_intent_nodes():
-    model = RecordingModel("order", [
-        {"id": "history", "name": "query_history_order"},
-        {"id": "draft", "name": "modify_draft", "depends_on": ["history"]},
-    ])
-    result = build_intent_graph(model).invoke({"message": "参考历史订单修改当前草稿"})
+    model = RecordingModel("order", [{"id": "draft", "name": "modify_draft"}])
+    result = build_intent_graph(model).invoke({"message": "修改当前草稿"})
     assert model.calls == ["main_intent_node", "sub_intent_node"]
     assert result["main_intent"] == "order"
-    assert [s.name for s in result["intent_plan"].sub_intents] == ["query_history_order", "modify_draft"]
+    assert [s.name for s in result["intent_plan"].sub_intents] == ["modify_draft"]
     assert result["needs_clarification"] is False
 
 
@@ -66,8 +63,8 @@ def test_capability_inquiry_message_routes_to_qa():
 
 
 def test_graph_is_recognition_only():
-    model = RecordingModel("order", [{"name": "query_history_order"}])
-    result = build_intent_graph(model).invoke({"message": "查询历史订单"})
-    assert result["intent_plan"].sub_intents[0].name == "query_history_order"
+    model = RecordingModel("order", [{"name": "create_order"}])
+    result = build_intent_graph(model).invoke({"message": "创建订单"})
+    assert result["intent_plan"].sub_intents[0].name == "create_order"
     assert not hasattr(model, "query_history")
     assert not hasattr(model, "modify_draft")

@@ -3,7 +3,7 @@ from inorder_llm.order_summary import build_order_summary
 
 
 def _time():
-    return {"context": "new_order", "start": "2026-08-28T10:00:00", "end": "2026-08-28T12:00:00"}
+    return {"start": "2026-08-28T10:00:00", "end": "2026-08-28T12:00:00"}
 
 
 def _complete_context():
@@ -47,11 +47,11 @@ def test_weight_or_quantity_is_one_combined_requirement():
     assert [item.field for item in result.missing_required] == ["cargo.weight_or_quantity"]
 
 
-def test_history_time_does_not_satisfy_delivery_time():
+def test_time_without_context_satisfies_delivery_time():
     context = _complete_context()
-    context.delivery_time = {"context": "history", "start": "2026-08-20T00:00:00", "end": "2026-08-20T23:59:00"}
+    context.delivery_time = {"start": "2026-08-20T00:00:00", "end": "2026-08-20T23:59:00"}
     result = build_order_summary(context)
-    assert any(item.field == "delivery_time" for item in result.missing_required)
+    assert not any(item.field == "delivery_time" for item in result.missing_required)
 
 
 def test_vehicle_is_not_required_when_absent():

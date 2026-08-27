@@ -43,9 +43,6 @@ def _valid_delivery_time(value: Any) -> bool:
     value = _value(value)
     if not isinstance(value, Mapping):
         return False
-    # History-query time is not a delivery requirement for a new order.
-    if _text(value.get("context")).lower() == "history":
-        return False
     return bool(_text(value.get("start")) or _text(value.get("end")))
 
 

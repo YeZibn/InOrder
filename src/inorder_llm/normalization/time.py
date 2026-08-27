@@ -9,7 +9,6 @@ from ..extract.models import Entity
 
 
 TIMEZONE = ZoneInfo("Asia/Shanghai")
-VALID_CONTEXTS = ("new_order", "history")
 TIME_FORMATS = ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S")
 
 
@@ -56,11 +55,6 @@ def normalize_time_entity(entity: Entity) -> Entity:
     if entity.type != "time":
         return entity
     attrs = deepcopy(dict(entity.attributes))
-    context = attrs.get("context")
-    if context not in VALID_CONTEXTS:
-        raise TimeNormalizationError(
-            "time context must be 'new_order' or 'history'", field="context", value=context
-        )
     start = _parse_boundary(attrs.get("start"), "start")
     end = _parse_boundary(attrs.get("end"), "end")
     if start is None and end is None:
@@ -71,7 +65,6 @@ def normalize_time_entity(entity: Entity) -> Entity:
     raw = attrs.get("raw", entity.extraction_text)
     attrs.update(
         {
-            "context": context,
             "start": _format_boundary(start),
             "end": _format_boundary(end),
             "kind": kind,
@@ -87,8 +80,6 @@ def normalize_time_entities(entities: Iterable[Entity]) -> List[Entity]:
 
 
 __all__ = [
-    "TIMEZONE",
-    "VALID_CONTEXTS",
     "TimeNormalizationError",
     "normalize_time_entity",
     "normalize_time_entities",

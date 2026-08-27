@@ -89,7 +89,6 @@ class OrderContext:
     payment_type: Optional[int] = None
     service_type: Optional[str] = None
     remark: Optional[str] = None
-    referenced_order_id: Optional[str] = None
     # Stable time anchor for relative expressions across a conversation.
     # This is distinct from delivery_time, which is an order field.  Keep it
     # last to preserve the positional constructor order of older callers.

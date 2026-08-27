@@ -49,8 +49,9 @@ def test_main_intent_prompt_defines_order_and_qa_with_execution_priority():
 
 def test_sub_intent_prompt_lists_allowed_names_and_depends_on_rules():
     prompt = SUB_INTENT_SYSTEM_PROMPT
-    for name in ("create_order", "modify_draft", "query_history_order"):
+    for name in ("create_order", "modify_draft"):
         assert name in prompt
+    assert "query_history_order" not in prompt
     assert "depends_on" in prompt
     assert "保守" in prompt
     assert "sub_intents" in prompt

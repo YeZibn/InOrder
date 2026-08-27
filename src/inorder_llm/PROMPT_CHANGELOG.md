@@ -55,6 +55,16 @@
 
 ### `SUB_INTENT_SYSTEM_PROMPT`（`intent/resolver.py`）
 
+#### 2026-08-27T10:25:45+0800
+
+- **变更摘要**:
+  - 删除 `query_history_order` 子意图，仅保留当前订单 `create_order` 与 `modify_draft`。
+- **原因**: 当前 Python 工作流不实现历史订单查询，避免模型输出下游无法执行的计划。
+- **关联**: OpenSpec change `remove-order-history-context`
+- **评测结果**:
+  - `PYTHONPATH=src /opt/miniconda3/envs/agent/bin/python -m pytest -q tests/test_intent_resolver.py tests/test_intent_graph.py` → 14 passed。
+  - 尚无真实 LLM 评测集，待补充。
+
 #### 2026-08-15
 
 - **变更摘要**:
@@ -83,6 +93,17 @@
 ---
 
 ### `EXTRACTION_SYSTEM_PROMPT`（`extract/resolver.py`）
+
+#### 2026-08-27T10:25:45+0800
+
+- **变更摘要**:
+  - 删除 `order_id` 实体及时间 `new_order/history` context 要求，明确只提取当前订单实体。
+  - 会话历史仅用于当前轮指代和省略，不作为历史订单数据来源。
+- **原因**: 统一当前会话与当前订单模型，避免历史订单字段进入 Reducer 并触发无效分支。
+- **关联**: OpenSpec change `remove-order-history-context`
+- **评测结果**:
+  - `PYTHONPATH=src /opt/miniconda3/envs/agent/bin/python -m pytest -q tests/test_extract.py tests/test_langextract_adapter.py` → 62 passed, 1 skipped。
+  - 尚无真实 LLM 评测集，待补充。
 
 #### 2026-08-20T17:20:02+0800
 
@@ -125,7 +146,7 @@
 
 - **变更摘要**:
   - 新增 `extract` 模块（`models`/`resolver`），引入实体提取 prompt。
-  - 保留现成 14 类实体定义与全部语义归一规则（时间归一、车型归一、地址角色、人名拆分、history context 标记）。
+  - 保留现成 13 类当前订单实体定义与时间、车型、地址及人名归一规则；移除历史订单 context 标记。
   - 扩展 action 维度：每个实体携带 `action`（`add`/`set`/`remove`/`replace`），含判定规则与每类 action 的 few-shot 示例。
   - 输出严格 JSON schema：`{"entities":[{type,action,extraction_text,attributes}]}`，复用 `_json_call` 严格 JSON 模式与 `StructuredIntentError` 错误约定。
   - 消息构造：system=EXTRACTION_SYSTEM_PROMPT；user=参考时间行「【参考时间】YYYY-MM-DD HH:MM（星期X）」+ history 上下文段 + 用户本次输入。
@@ -133,13 +154,23 @@
 - **关联**: OpenSpec change `extend-extract-with-action-semantics`
 - **评测结果**:
   - `conda run -n agent python -m pytest -q` → 52 passed。
-  - 新增 `tests/test_extract.py`：prompt 内容断言（action 枚举、14 类实体、归一规则、few-shot）、action 四类提取（add/set/remove/replace）、实体类型覆盖与归一（location 角色、vehicle_type 归一值、cargo 属性、time history context）、解析健壮性（非法 JSON/非法 action/缺字段/非数组/非对象 → StructuredIntentError）、输入参数注入（参考时间含星期、history 段、system/user 消息顺序）。
+  - 新增 `tests/test_extract.py`：prompt 内容断言（action 枚举、13 类实体、归一规则、few-shot）、action 四类提取、实体类型覆盖与归一及解析健壮性测试。
   - 尚未接入图执行（会话状态载体未引入），extract 作为纯函数独立测试。
   - 尚无真实 LLM 评测集；action 判定与实体归一准确率待评测集补充。
 
 ---
 
 ### `LANGEXTRACT_ORDER_PROMPT_DESCRIPTION`（`extract/resolver.py`）
+
+#### 2026-08-27T10:25:45+0800
+
+- **变更摘要**:
+  - LangExtract grounded schema 移除历史订单号和时间业务 context，限定为当前订单字段。
+- **原因**: 与 JSON Extract 契约保持一致，避免生成无法消费的历史订单实体。
+- **关联**: OpenSpec change `remove-order-history-context`
+- **评测结果**:
+  - `PYTHONPATH=src /opt/miniconda3/envs/agent/bin/python -m pytest -q tests/test_langextract_adapter.py` → 17 passed, 1 skipped。
+  - 尚无真实 LLM 评测集，待补充。
 
 #### 2026-08-20T17:20:02+0800
 
@@ -191,6 +222,16 @@
 ---
 
 ### `REWRITE_SYSTEM_PROMPT`（`rewrite/resolver.py`）
+
+#### 2026-08-27T10:25:45+0800
+
+- **变更摘要**:
+  - 明确 HistoryConversation 仅表示当前会话；禁止查询、恢复或合并历史订单。
+- **原因**: 保留多轮指代能力，同时移除未实现的历史订单语义。
+- **关联**: OpenSpec change `remove-order-history-context`
+- **评测结果**:
+  - `PYTHONPATH=src /opt/miniconda3/envs/agent/bin/python -m pytest -q tests/test_rewrite.py` → 8 passed。
+  - 尚无真实 LLM 评测集，待补充。
 
 #### 2026-08-20T14:55:09+0800
 

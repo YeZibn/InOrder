@@ -18,7 +18,7 @@ class StructuredIntentError(IntentPlanningError):
 MAIN_INTENT_SYSTEM_PROMPT = """你是一个运输订单管理助手的意图分类器。请将用户消息分类为唯一的主意图。
 
 判据：用户期望的输出类型，而非是否使用命令动词。
-- order：用户期望的输出是行动/结果，即想让一次运输或订单发生。包括直接指令（创建/修改/查询订单）和业务目标愿望陈述（运货/发货/配送/托运/下单等），不要求使用显式命令动词。
+- order：用户期望的输出是行动/结果，即想让一次运输或订单发生。包括当前订单创建或修改和业务目标愿望陈述（运货/发货/配送/托运/下单等），不要求使用显式命令动词。
 - qa：用户期望的输出是信息（物流、商品、规则、操作方法、一般知识），没有要求让运输/订单发生。
 
 领域映射（InOrder 为运输订单助手，以下业务目标词均表示 order）：
@@ -34,8 +34,6 @@ MAIN_INTENT_SYSTEM_PROMPT = """你是一个运输订单管理助手的意图分�
 
 边界示例：
 - “创建一单 2 吨钢材的运输订单” -> order
-- “用最近的历史订单修改当前草稿” -> order
-- “查询我的历史订单” -> order
 - “我想从上海运货到温州” -> order（业务目标愿望，无命令动词）
 - “什么是预约配送？” -> qa
 - “怎么下单？” -> qa
@@ -54,7 +52,6 @@ SUB_INTENT_SYSTEM_PROMPT = """你是一个订单管理助手的订单子意图�
 允许的子意图名称：
 - create_order：创建新订单草稿（运货/发货/配送/托运等运输需求均映射为此子意图）
 - modify_draft：修改当前订单草稿
-- query_history_order：查询历史订单
 
 规则：
 - 识别用户明确要求的每一个独立订单动作，不要臆造用户未提及的动作。
@@ -63,7 +60,7 @@ SUB_INTENT_SYSTEM_PROMPT = """你是一个订单管理助手的订单子意图�
 - 为每个步骤分配形如 "step_<n>" 的稳定 id。
 
 输出：仅返回符合以下 schema 的 JSON 对象：
-{"sub_intents": [{"id": "step_1", "name": "create_order" | "modify_draft" | "query_history_order", "arguments": {...}, "depends_on": ["step_<n>"]}]}
+{"sub_intents": [{"id": "step_1", "name": "create_order" | "modify_draft", "arguments": {...}, "depends_on": ["step_<n>"]}]}
 - "id" 必填；"arguments" 为空时默认为 {}；"depends_on" 可选，为空时省略。
 - 未识别到订单子意图时返回 {"sub_intents": []}。
 不要包含任何其他键、文字或解释。

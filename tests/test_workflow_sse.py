@@ -66,7 +66,7 @@ def test_done_event_includes_order_summary_without_raw_dataclass_leak():
     context = OrderContext(
         pickup_location={"city": "温州"}, dropoff_location={"city": "上海"},
         cargo=[{"name": "苹果", "weight": ["1吨"]}],
-        delivery_time={"context": "new_order", "start": "2026-08-28T10:00:00"},
+        delivery_time={"start": "2026-08-28T10:00:00"},
     )
     result = {"intent_result": {"main_intent": "order"}, "order_graph_entered": True,
               "order_result": {"order_context": context, "order_context_updated": True,

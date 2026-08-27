@@ -11,7 +11,7 @@ from .models import Entity
 
 LANGEXTRACT_ORDER_PROMPT_DESCRIPTION = f"""你是物流订单 grounded entity extractor。仅从【待提取文本】选择连续原文作为 extraction_text；【参考时间】仅用于相对时间计算，不能作为实体来源。每个实体 attributes 必须包含 action，且 action 只能是 add、set、remove、replace，由模型决定。不得猜测、补全或重写用户未表达的字段；未识别实体时返回空提取。
 
-支持 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark、order_id。location 必须给 role=pickup/dropoff，并可包含用户明确表达的 city 与 full_address；full_address 必须来自待提取文本中的连续地址原文，不得补全或改写。time 给 context/start/end。车型和规格必须保留用户原文，不要生成或猜测 canonical code；remark 的 extraction_text 为用户原文，attributes.value 为简短业务概括。
+支持 time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type、remark。location 必须给 role=pickup/dropoff，并可包含用户明确表达的 city 与 full_address；full_address 必须来自待提取文本中的连续地址原文，不得补全或改写。time 给 start/end。车型和规格必须保留用户原文，不要生成或猜测 canonical code；remark 的 extraction_text 为用户原文，attributes.value 为简短业务概括。
 
 {render_vehicle_prompt_vocabulary()}"""
 
@@ -45,7 +45,7 @@ def build_langextract_order_examples():
             Extraction("vehicle_specs", "厢式", attributes={"action": "set", "value": "厢式"}),
         ]),
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】明天上午王强收，电话13800138000，苹果容易碎轻拿轻放", [
-            Extraction("time", "明天上午", attributes={"action": "set", "context": "new_order", "start": "2026-08-18 06:00", "end": "2026-08-18 12:00"}),
+            Extraction("time", "明天上午", attributes={"action": "set", "start": "2026-08-18 06:00", "end": "2026-08-18 12:00"}),
             Extraction("person", "王强", attributes={"action": "set", "role": "receiver", "surname": "王", "name": "强"}),
             Extraction("phone", "13800138000", attributes={"action": "set", "role": "receiver", "value": "13800138000"}),
             Extraction("remark", "苹果容易碎轻拿轻放", attributes={"action": "set", "value": "易碎轻放"}),
@@ -56,7 +56,6 @@ def build_langextract_order_examples():
             Extraction("payment_type", "到付", attributes={"action": "set", "value": 0}),
             Extraction("invoice_type", "不开票", attributes={"action": "set", "value": 1}),
             Extraction("service_type", "快车", attributes={"action": "set", "value": "express"}),
-            Extraction("order_id", "订单A123", attributes={"action": "set", "context": "history"}),
         ]),
         ExampleData("【参考时间】2026-08-17 10:00\n【待提取文本】小车，9米以上", [
             Extraction("vehicle_type", "小车", attributes={"action": "set", "value": "小车"}),
@@ -66,7 +65,7 @@ def build_langextract_order_examples():
 
 EXTRACTION_SYSTEM_PROMPT = """你是物流订单实体提取器。从用户的自然语言输入中提取与下单相关的实体信息，按实体在原文中出现的顺序依次提取；除 remark 外尽量使用原文短语，不要改写。remark 必须用概括性词语精炼表达，勿逐字复述长句。
 
-输入第一行固定为「【参考时间】YYYY-MM-DD HH:MM（星期X）」，表示当前时间（系统时钟/中国时区），括号内为该日期对应的中文星期，用于辅助相对时间推理。所有相对时间表达均以该参考时间为基准换算为绝对时间。其后可能附带「【对话历史】」段，提供多轮上下文用于判断指代、省略与历史订单引用。
+输入第一行固定为「【参考时间】YYYY-MM-DD HH:MM（星期X）」，表示当前时间（系统时钟/中国时区），括号内为该日期对应的中文星期，用于辅助相对时间推理。所有相对时间表达均以该参考时间为基准换算为绝对时间。其后可能附带「【对话历史】」段，提供当前会话上下文用于判断指代与省略；不得将其解释为历史订单数据。
 
 每个提取出的实体 MUST 携带 action 字段，表示本轮对该实体应用的操作。action 取值：
 - add：增量累加（如"再加一吨苹果"——在已有基础上增加）
@@ -83,8 +82,7 @@ action 判定规则：
 
 实体类型说明：
 
-time —— 时间表达式
-- context：history（历史订单引用）或 new_order（新需求）
+time —— 当前订单送达时间表达式
 - start：时间区间开始，绝对时间「YYYY-MM-DD HH:MM」
 - end：时间区间结束，绝对时间「YYYY-MM-DD HH:MM」
 
@@ -160,15 +158,12 @@ remark —— 备注
   - "易碎轻放"
 - 多项备注用分号拼接
 
-order_id —— 订单号
-
 语义规则：
 - "从A到B"/"从A送到B"：A=装货地，B=卸货地
 - "送到X"/"拉到X"：X=卸货地
 - "到X装货"/"去X取货"：X=装货地
 - "X收"/"X签收"：X=收货人
 - "找X拿"/"X发货"：X=发货人
-- 当用户引用历史订单时，相关实体 context 设为 history；新需求实体 context 设为 new_order
 
 Few-shot 示例：
 
@@ -202,28 +197,19 @@ Few-shot 示例：
 输出：
 {"entities":[{"type":"vehicle_specs","action":"replace","extraction_text":"冷链车","attributes":{"value":"冷链车"}}]}
 
-示例5（history context）：
-输入：【参考时间】2026-08-14 10:00（星期五）
-【对话历史】
-user: 我要下单从上海运货到温州
-assistant: 已为您创建草稿
-用户：上次那个再发一单
-输出：
-{"entities":[{"type":"order_id","action":"set","extraction_text":"上次那个","attributes":{"context":"history"}}]}
-
-示例6（cold-chain spec）：
+示例5（cold-chain spec）：
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：要冷链车
 输出：
 {"entities":[{"type":"vehicle_specs","action":"set","extraction_text":"冷链车","attributes":{"value":"冷链车"}}]}
 
-示例7（combined vehicle and specs）：
+示例6（combined vehicle and specs）：
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：要一辆4米2冷链厢式车
 输出：
 {"entities":[{"type":"vehicle_type","action":"set","extraction_text":"4米2","attributes":{"value":"4米2"}},{"type":"vehicle_specs","action":"set","extraction_text":"冷链","attributes":{"value":"冷链"}},{"type":"vehicle_specs","action":"set","extraction_text":"厢式","attributes":{"value":"厢式"}}]}
 
-示例8（multiple specs independently）：
+示例7（multiple specs independently）：
 输入：【参考时间】2026-08-14 10:00（星期五）
 用户：4米2高顶带尾板
 输出：

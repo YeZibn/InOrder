@@ -151,7 +151,7 @@ def test_langextract_examples_cover_all_entity_classes_and_source_boundary():
     assert classes == {
         "time", "location", "person", "phone", "vehicle_type", "vehicle_specs",
         "cargo", "follow_car_number", "oneself_follow_flag", "invoice_type",
-        "payment_type", "service_type", "remark", "order_id",
+        "payment_type", "service_type", "remark",
     }
     assert "【待提取文本】一吨苹果" in format_langextract_source("一吨苹果", "2026-08-17 10:00")
 

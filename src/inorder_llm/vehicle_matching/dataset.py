@@ -235,8 +235,8 @@ EvaluationSample('4.2m', 'vehicle_type', 'truck_4m2', 'positive_variant'),
     EvaluationSample('4米左右', 'vehicle_type', None, 'approximation'),
     EvaluationSample('大约4米2', 'vehicle_type', None, 'approximation'),
     EvaluationSample('不小于4米2', 'vehicle_type', None, 'comparison'),
-    EvaluationSample('之前那个车', 'vehicle_type', None, 'historical_reference'),
-    EvaluationSample('还是上次的车', 'vehicle_type', None, 'historical_reference'),
+    EvaluationSample('之前那个车', 'vehicle_type', None, 'unresolved_reference'),
+    EvaluationSample('还是上次的车', 'vehicle_type', None, 'unresolved_reference'),
     EvaluationSample('小面', 'vehicle_type', None, 'short_confusion'),
     EvaluationSample('中面', 'vehicle_type', None, 'short_confusion'),
     EvaluationSample('大面', 'vehicle_type', None, 'short_confusion'),
@@ -525,4 +525,3 @@ def build_evaluation_samples() -> Tuple[EvaluationSample, ...]:
 
 
 __all__ = ["TARGET_SIZE", "build_evaluation_samples", "EVALUATION_SAMPLES"]
-

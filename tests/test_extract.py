@@ -36,12 +36,13 @@ def test_prompt_defines_action_enum_and_judgment_rules():
     assert "entities" in p
 
 
-def test_prompt_covers_fourteen_entity_types():
+def test_prompt_covers_current_entity_types():
     p = EXTRACTION_SYSTEM_PROMPT
     for t in ("time", "location", "person", "phone", "vehicle_type",
               "vehicle_specs", "cargo", "follow_car_number", "oneself_follow_flag",
-              "invoice_type", "payment_type", "service_type", "remark", "order_id"):
+              "invoice_type", "payment_type", "service_type", "remark"):
         assert t in p
+    assert "order_id" not in p
 
 
 def test_prompt_contains_normalization_rules():
@@ -220,12 +221,12 @@ def test_extract_cargo_attributes():
     assert entities[0].attributes["weight"] == "2吨"
 
 
-def test_extract_time_with_history_context():
-    payload = {"entities": [{"type": "time", "action": "set", "extraction_text": "上周",
-                             "attributes": {"context": "history", "start": "", "end": "2026-08-07 10:00"}}]}
+def test_extract_time_without_context():
+    payload = {"entities": [{"type": "time", "action": "set", "extraction_text": "明天下午三点",
+                             "attributes": {"start": "2026-08-15 15:00", "end": "2026-08-15 15:00"}}]}
     client = FakeLLMClient(json.dumps(payload))
-    entities = extract_entities(client, "查上周订单", [], "2026-08-14 10:00")
-    assert entities[0].attributes["context"] == "history"
+    entities = extract_entities(client, "明天下午三点送达", [], "2026-08-14 10:00")
+    assert "context" not in entities[0].attributes
 
 
 # --- 4.3 解析健壮性 ---

@@ -20,7 +20,6 @@ _SCALAR_TYPES = {
     "invoice_type": "invoice_type",
     "payment_type": "payment_type",
     "service_type": "service_type",
-    "order_id": "referenced_order_id",
 }
 _CARGO_RAW_FIELDS = ("weight", "quantity", "volume", "dimensions")
 
@@ -90,8 +89,6 @@ class OrderContextReducer:
         elif entity.type == "phone":
             self._phone(context, entity)
         elif entity.type == "time":
-            if entity.attributes.get("context") == "history":
-                raise ContextReductionError("history time cannot update delivery_time")
             self._single(context, "delivery_time", _business_attributes(entity), entity)
         elif entity.type == "cargo":
             self._cargo(context, entity)

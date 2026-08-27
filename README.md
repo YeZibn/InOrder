@@ -97,7 +97,7 @@ from inorder_llm.graph.intent import build_intent_graph
 graph = build_intent_graph(your_intent_model)
 result = graph.invoke({"message": "参考最近历史订单，修改当前草稿"})
 plan = result["intent_plan"]
-# plan.sub_intents: query_history_order -> modify_draft
+# plan.sub_intents: create_order / modify_draft
 ```
 
 `IntentPlan` 支持主意图、多个订单子意图、步骤参数和 `depends_on`；后续主图可以根据该计划路由到业务子图。
