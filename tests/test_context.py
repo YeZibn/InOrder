@@ -1,6 +1,8 @@
 from inorder_llm.context import (ConversationSession, HistoryConversation, OrderContext,
                                  OrderContextReducer)
+from inorder_llm.context.summary import summarize_assistant, to_data
 from inorder_llm.extract.models import Entity
+from inorder_llm.order_summary.models import OrderSummary
 
 
 def test_history_conversation_and_session():
@@ -188,6 +190,56 @@ def test_raw_cargo_context_serializes_as_json_compatible_lists():
         "volume": [],
         "dimensions": [],
     }]
+
+
+def _order_summary(user_message="已为您整理好这笔运输需求：苹果从温州到上海"):
+    return OrderSummary(
+        status="complete",
+        summary="已识别运输路线，货物为苹果。",
+        missing_required=[],
+        user_message=user_message,
+    )
+
+
+def test_to_data_converts_domain_objects_with_to_dict():
+    summary = _order_summary()
+    converted = to_data(summary)
+    assert isinstance(converted, dict)
+    assert to_data({"plain": "dict"}) == {"plain": "dict"}
+
+
+def test_summarize_assistant_prefers_order_summary_from_dataclass():
+    result = {
+        "intent_result": {"main_intent": "order"},
+        "order_result": {"order_summary": _order_summary()},
+    }
+    text, metadata = summarize_assistant(result)
+    assert text == "已为您整理好这笔运输需求：苹果从温州到上海"
+    assert metadata == {"main_intent": "order", "order_status": "complete"}
+
+
+def test_summarize_assistant_reads_nested_order_result():
+    result = {
+        "intent_result": {"main_intent": "order"},
+        "order_summary": {"user_message": "", "summary": "已识别运输路线。", "status": "incomplete"},
+    }
+    text, metadata = summarize_assistant(result)
+    assert text == "已识别运输路线。"
+    assert metadata["order_status"] == "incomplete"
+
+
+def test_summarize_assistant_falls_back_to_intent_material():
+    result = {"intent_result": {"main_intent": "qa"}, "order_graph_entered": False}
+    text, metadata = summarize_assistant(result)
+    assert text == "已完成意图识别：qa"
+    assert metadata == {"main_intent": "qa"}
+
+
+def test_summarize_assistant_bottom_fallback_without_extractable_content():
+    text, metadata = summarize_assistant({})
+    assert text == "已完成意图识别：未知"
+    assert metadata == {}
+    assert summarize_assistant("纯文本结果") == ("纯文本结果", {})
 
 
 def test_reducer_list_and_remark_actions():

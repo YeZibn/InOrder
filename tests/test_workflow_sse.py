@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from inorder_llm.context import HistoryConversation, OrderContext
+from inorder_llm.order_summary.models import OrderSummary
 from inorder_llm.workflow import EventType, WorkflowEvent, WorkflowEventAdapter, error_event
 from inorder_llm.workflow.api import create_app
 from inorder_llm.infrastructure.llm.errors import WorkflowTimeoutError
@@ -154,6 +155,31 @@ def test_api_done_returns_recovered_history_for_pending_user():
     assert turns[-2]["role"] == "user"
     assert turns[-2]["content"] == "我要运苹果\n从温州到上海"
     assert turns[-1]["role"] == "assistant"
+
+
+def test_api_done_history_assistant_carries_order_summary():
+    # The workflow state holds the OrderSummary dataclass (not a dict); the
+    # DONE history snapshot must serialize it and use its user_message.
+    summary = OrderSummary(
+        status="complete",
+        summary="已识别运输路线，货物为苹果。",
+        missing_required=[],
+        user_message="已为您整理好这笔运输需求：苹果从温州到上海。",
+    )
+    graph = FakeGraph({
+        "intent_result": {"main_intent": "order"},
+        "order_graph_entered": True,
+        "order_result": {"order_summary": summary},
+    })
+    client = TestClient(create_app(main_graph=graph))
+    response = client.post("/api/v2/chat", json={"session_id": "s", "message": "我要运一吨苹果从温州到上海"})
+    done = frames(response.text)[-1]
+    assert done["type"] == "DONE"
+    turns = done["payload"]["history"]["turns"]
+    assert len(turns) == 2
+    assert turns[-1]["role"] == "assistant"
+    assert turns[-1]["content"] == "已为您整理好这笔运输需求：苹果从温州到上海。"
+    assert turns[-1]["metadata"]["recovered"] is False
 
 
 def test_api_serves_same_origin_memory_test_page():

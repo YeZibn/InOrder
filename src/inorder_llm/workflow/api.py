@@ -8,6 +8,7 @@ from typing import Any, Callable, Iterator, Optional
 
 from ..context import HistoryConversation, OrderContext
 from ..context.recovery import ConversationRecovery, prepare_conversation_recovery
+from ..context.summary import summarize_assistant
 from ..reference_time import ReferenceTimeError, resolve_context_reference_time
 from .adapter import WorkflowEventAdapter
 from .events import error_event
@@ -122,21 +123,13 @@ def _with_recovery_history(event, recovery: ConversationRecovery, history: Histo
     if event.type is not EventType.DONE:
         return event
     result = event.payload.get("result", {})
-    assistant = ""
-    if isinstance(result, dict):
-        order = result.get("order_result") or result
-        summary = order.get("order_summary") if isinstance(order, dict) else None
-        if isinstance(summary, dict):
-            assistant = str(summary.get("user_message") or summary.get("summary") or "")
-        if not assistant:
-            intent = result.get("intent_result", {}).get("main_intent") if isinstance(result.get("intent_result"), dict) else None
-            assistant = "已完成意图识别：" + str(intent or "未知")
+    assistant, base_metadata = summarize_assistant(result) if isinstance(result, dict) else ("", {})
     completed = HistoryConversation()
     completed.turns = list(history.turns)
     if not completed.turns or completed.turns[-1].role != "user" or completed.turns[-1].content != recovery.message:
         completed.append_user(recovery.message)
     if assistant:
-        completed.append_assistant(assistant, {"recovered": recovery.recovered})
+        completed.append_assistant(assistant, {"recovered": recovery.recovered, **base_metadata})
     payload = dict(event.payload)
     payload["history"] = completed.to_dict()
     payload["history_recovered"] = recovery.recovered

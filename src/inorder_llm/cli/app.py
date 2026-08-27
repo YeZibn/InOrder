@@ -7,6 +7,7 @@ from typing import Callable, List, Optional
 
 from ..context.models import HistoryConversation, OrderContext
 from ..context.recovery import prepare_conversation_recovery
+from ..context.summary import intent_view, to_data
 from ..reference_time import resolve_context_reference_time
 from .runners import ChainContext, FullChainRunner, IntentChainRunner, OrderChainRunner
 
@@ -37,13 +38,10 @@ class CommandParser:
         return (parts[0][1:].lower(), parts[1:] or None)
 
 
-def _data(value):
-    return value.to_dict() if hasattr(value, "to_dict") else value
-
-
-def _intent_data(result):
-    plan = result.get("intent_plan") if isinstance(result, dict) else None
-    return _data(plan) if plan is not None else result
+# Thin aliases: CLI shares dict conversion and intent unwrapping with the API
+# path via context.summary (single source of truth).
+_data = to_data
+_intent_data = intent_view
 
 
 def _assistant_summary(result, chain: str, mode: Optional[str] = None):
