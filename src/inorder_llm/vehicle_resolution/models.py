@@ -12,6 +12,10 @@ class VehicleResolutionResult:
     reason: str = ""
     raw_vehicle_text: str | None = None
     candidates: List[Mapping[str, Any]] = field(default_factory=list)
+    effective_city: str | None = None
+    vehicle_data_source: str | None = None
+    catalog_version: str | None = None
+    catalog_stale: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -21,6 +25,10 @@ class VehicleResolutionResult:
             "reason": self.reason,
             **({"raw_vehicle_text": self.raw_vehicle_text} if self.raw_vehicle_text else {}),
             **({"candidates": [dict(item) for item in self.candidates]} if self.candidates else {}),
+            **({"effective_city": self.effective_city} if self.effective_city else {}),
+            **({"vehicle_data_source": self.vehicle_data_source} if self.vehicle_data_source else {}),
+            **({"catalog_version": self.catalog_version} if self.catalog_version else {}),
+            **({"catalog_stale": True} if self.catalog_stale else {}),
         }
 
 

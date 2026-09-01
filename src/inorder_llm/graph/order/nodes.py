@@ -157,7 +157,14 @@ class VehicleResolutionNode(BaseNode[OrderGraphState]):
                 )
             }
         raw_text = unresolved[0].extraction_text if unresolved else None
-        result = self.model.resolve(context.cargo_profiles, context.cargo_profile_summary, raw_text)
+        pickup = context.pickup_location if isinstance(context.pickup_location, dict) else {}
+        user_location = state.get("user_location") or {}
+        effective_city = pickup.get("city") or user_location.get("city")
+        parameters = inspect.signature(self.model.resolve).parameters.values()
+        if any(p.name == "effective_city" or p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters):
+            result = self.model.resolve(context.cargo_profiles, context.cargo_profile_summary, raw_text, effective_city=effective_city)
+        else:
+            result = self.model.resolve(context.cargo_profiles, context.cargo_profile_summary, raw_text)
         if matched_specs:
             merged_specs = list(dict.fromkeys([*result.vehicle_specs, *matched_specs]))
             result = VehicleResolutionResult(result.vehicle_type, merged_specs, result.source, result.reason, result.raw_vehicle_text)

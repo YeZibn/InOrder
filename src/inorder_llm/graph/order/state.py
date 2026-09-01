@@ -13,6 +13,7 @@ class OrderGraphState(TypedDict, total=False):
     message: str
     reference_time: str
     deadline_at: float
+    user_location: dict
     history: HistoryConversation
     order_context: OrderContext
     order_context_updated: bool

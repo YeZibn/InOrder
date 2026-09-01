@@ -67,6 +67,7 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
         history: Optional[dict] = None
         order_context: Optional[dict] = None
         reference_time: Optional[str] = None
+        user_location: Optional[dict] = None
 
     def resolve_graph():
         graph = main_graph or (graph_factory() if graph_factory else None)
@@ -96,6 +97,7 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
                 "history": state_history,
                 "order_context": order_context,
                 "reference_time": resolved_reference_time,
+                "user_location": payload.user_location or {},
                 "deadline_at": time.monotonic() + float(os.getenv("WORKFLOW_TIMEOUT_SECONDS", "90")),
             }
         except (ValidationError, ReferenceTimeError, ValueError, TypeError) as exc:

@@ -26,6 +26,14 @@ from .vehicles import (
     normalize_vehicle_keyword,
     render_vehicle_prompt_vocabulary,
 )
+from .provider import (
+    CachedVehicleCatalogProvider,
+    LocalVehicleCatalogProvider,
+    RpcVehicleCatalogProvider,
+    VehicleCatalogProvider,
+    VehicleCatalogSnapshot,
+    normalize_city,
+)
 
 __all__ = [
     "VehicleType",
@@ -47,4 +55,6 @@ __all__ = [
     "find_vehicle_keyword",
     "iter_vehicle_keywords",
     "normalize_vehicle_keyword",
+    "VehicleCatalogSnapshot", "VehicleCatalogProvider", "LocalVehicleCatalogProvider",
+    "RpcVehicleCatalogProvider", "CachedVehicleCatalogProvider", "normalize_city",
 ]

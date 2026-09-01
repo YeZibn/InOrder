@@ -6,6 +6,7 @@ from math import prod
 from typing import Any, Mapping, Sequence
 
 from ..catalog import VehicleType, get_vehicle_spec, get_vehicle_type, iter_vehicle_types
+from ..catalog.provider import LocalVehicleCatalogProvider, VehicleCatalogProvider, normalize_city
 from ..intent.resolver import StructuredIntentError
 from .models import VehicleResolutionResult
 
@@ -112,17 +113,19 @@ def _candidate(vehicle: VehicleType, specs: list[str], boxes: Sequence[_Box], to
 class VehicleResolutionResolver:
     """Drop-in replacement for the old LLM resolver; it never calls an LLM."""
 
-    def __init__(self, client: Any = None):
+    def __init__(self, client: Any = None, catalog_provider: VehicleCatalogProvider | None = None):
         self.client = client  # retained only for constructor compatibility
+        self.catalog_provider = catalog_provider or LocalVehicleCatalogProvider()
 
-    def resolve(self, cargo_profiles: Sequence[Mapping[str, Any]], summary: Mapping[str, Any] | None, raw_vehicle_text: str | None = None) -> VehicleResolutionResult:
+    def resolve(self, cargo_profiles: Sequence[Mapping[str, Any]], summary: Mapping[str, Any] | None, raw_vehicle_text: str | None = None, effective_city: str | None = None) -> VehicleResolutionResult:
         summary = summary or {}
+        catalog = self.catalog_provider.get_catalog(normalize_city(effective_city))
         total_weight = _number(summary.get("total_weight_kg")) or sum(_number(item.get("weight_kg")) or 0.0 for item in cargo_profiles)
         total_volume = _number(summary.get("total_volume_m3")) or sum(_number(item.get("volume_m3")) or 0.0 for item in cargo_profiles)
         boxes = _boxes(cargo_profiles)
         specs = _required_specs(cargo_profiles)
         candidates = []
-        for vehicle in iter_vehicle_types():
+        for vehicle in catalog.vehicle_types:
             item = _candidate(vehicle, specs, boxes, total_weight, total_volume)
             if item is not None:
                 candidates.append(item)
@@ -136,7 +139,7 @@ class VehicleResolutionResolver:
         primary = candidates[0] if candidates else {}
         return VehicleResolutionResult(
             primary.get("vehicle_type", ""), list(primary.get("vehicle_specs", specs)), "estimated", reason,
-            raw_vehicle_text, candidates,
+            raw_vehicle_text, candidates, catalog.city, catalog.source, catalog.version, catalog.catalog_stale,
         )
 
 
