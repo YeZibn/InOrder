@@ -108,3 +108,33 @@ def test_empty_cargo_clears_profiles_without_backend_call():
     updated = regenerate_cargo_profile(OrderContext(cargo_profiles=[{"name": "旧货物"}], cargo_profile_summary={"x": 1}), model)
     assert updated.cargo_profiles == [] and updated.cargo_profile_summary is None
     assert model.calls == []
+
+
+def test_resolver_rejects_undercounted_repeated_raw_weight_and_repairs():
+    raw = [{"name": "苹果", "weight": ["1吨", "1吨"], "quantity": [], "volume": [], "dimensions": []}]
+    undercounted = _payload([_profile("苹果", weight=1000.0)], weight=1000.0)
+    corrected = _payload([_profile("苹果", weight=2000.0)], weight=2000.0)
+    client = FakeClient(undercounted)
+    client.payloads = [undercounted, corrected]
+    def chat(messages):
+        client.calls.append(messages)
+        payload = client.payloads.pop(0)
+        return LLMResponse(json.dumps(payload, ensure_ascii=False), "test")
+    client.chat = chat
+    result = CargoProfileResolver(client).profile(raw)
+    assert result.cargo_profile_summary.total_weight_kg == 2000.0
+    assert len(client.calls) == 2
+
+
+def test_resolver_requires_profile_summary_to_equal_profile_sum():
+    raw = [{"name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}]
+    first = _payload([_profile("苹果", weight=1000.0, volume=1.8)], weight=999.0, volume=1.8)
+    second = _payload([_profile("苹果", weight=1000.0, volume=1.8)], weight=1000.0, volume=1.8)
+    client = FakeClient(first)
+    client.payloads = [first, second]
+    def chat(messages):
+        client.calls.append(messages)
+        return LLMResponse(json.dumps(client.payloads.pop(0), ensure_ascii=False), "test")
+    client.chat = chat
+    result = CargoProfileResolver(client).profile(raw)
+    assert result.cargo_profile_summary.total_weight_kg == 1000.0

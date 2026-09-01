@@ -19,12 +19,13 @@ CARGO_PROFILE_SYSTEM_PROMPT = r"""你是物流订单的货物约束画像生成�
 规则：
 1. 核心数值是本次运输货物的总规模：weight_kg（公斤）、volume_m3（立方米）、dimensions_cm（整体占用长宽高，厘米）。
 2. 货物类型与重量、数量、包装、体积或尺寸中的任意一项运输规模信息同时存在时，必须强制进行物流常识估算，必须尽力估算核心数值；不能因为用户没有明确给出全部数值就直接返回 null。先尝试沿“货物类型 → 常见单件参数或密度 → 数量/包装 → 堆积密度 → 装车占用体积和整体尺寸”的链路推理。
-3. 例如“一吨苹果”必须根据苹果常见单果重量估算数量，再按纸箱或周转筐包装、堆积密度和装车方式估算总体积与整体尺寸；“100箱苹果”必须根据常见箱规估算总重量、总体积与整体尺寸。估算值不要求精确，但必须是可用于车型初筛的具体数值。
-4. 只有现有信息完全不足以确定本次运输规模时，核心数值才允许为 null。例如仅知道“苹果”而不知道数量、重量、包装、体积或尺寸时，可以返回 null。
-4. stackability 只能是 full、partial、none、unknown；fragility 只能是 low、medium、high、unknown；temperature 只能是 ambient、cool、refrigerated、frozen、unknown。可以根据货物类型进行常识推断，无法判断时使用 unknown。
-5. dimensions_cm 表示预计整体装车占用的长宽高，不是单件尺寸。每条画像必须有非空 reason，说明明确值、推导值、常识估算值及主要假设；不得只写“用户未提供”。只有确实没有运输规模时，才说明无法估算的具体原因。不要输出 source、warnings、raw、unit、basis、confidence、assumptions 等字段。
-6. 汇总只返回 total_weight_kg、total_volume_m3 和 reason。如果任一货物的对应核心数值在尝试上述推理链后仍完全无法估算，对应汇总值才可以为 null，并在 reason 中说明。
-7. 不要将旧画像作为输入或累加来源；只根据本次完整原始货物列表重新生成全量结果。
+3. 原始货物中同一字段的数组是多轮新增或多条明细，表示累加项，不是候选值、替代值，也不能只取最后一项。必须逐项解析并换算后求和。例如 `weight=["1吨", "1吨"]` 必须得到总重量 `2000kg`；`weight=["1吨", "500公斤"]` 必须得到 `1500kg`。数量、体积数组同样遵循累加规则；尺寸数组按多条货物明细综合估算整体占用尺寸。
+4. 例如“一吨苹果”必须根据苹果常见单果重量估算数量，再按纸箱或周转筐包装、堆积密度和装车方式估算总体积与整体尺寸；“100箱苹果”必须根据常见箱规估算总重量、总体积与整体尺寸。估算值不要求精确，但必须是可用于车型初筛的具体数值。
+5. 只有现有信息完全不足以确定本次运输规模时，核心数值才允许为 null。例如仅知道“苹果”而不知道数量、重量、包装、体积或尺寸时，可以返回 null。
+6. stackability 只能是 full、partial、none、unknown；fragility 只能是 low、medium、high、unknown；temperature 只能是 ambient、cool、refrigerated、frozen、unknown。可以根据货物类型进行常识推断，无法判断时使用 unknown。
+7. dimensions_cm 表示预计整体装车占用的长宽高，不是单件尺寸。每条画像必须有非空 reason，说明明确值、推导值、常识估算值及主要假设；不得只写“用户未提供”。只有确实没有运输规模时，才说明无法估算的具体原因。不要输出 source、warnings、raw、unit、basis、confidence、assumptions 等字段。
+8. 汇总只返回 total_weight_kg、total_volume_m3 和 reason。如果任一货物的对应核心数值在尝试上述推理链后仍完全无法估算，对应汇总值才可以为 null，并在 reason 中说明；否则汇总必须等于所有画像值之和。
+9. 不要将旧画像作为输入或累加来源；只根据本次完整原始货物列表重新生成全量结果。
 
 输出只能是 JSON 对象，不要 Markdown、解释或额外字段，顶层 schema 固定为：
 {
@@ -51,6 +52,57 @@ _STACK = {"full", "partial", "none", "unknown"}
 _FRAGILITY = {"low", "medium", "high", "unknown"}
 _TEMPERATURE = {"ambient", "cool", "refrigerated", "frozen", "unknown"}
 _FORBIDDEN = {"vehicle_type", "vehicle_specs", "recommended_vehicle", "vehicle_code", "packing_coordinates", "feasible_vehicles"}
+
+
+def _explicit_total(values: Any, kind: str) -> float | None:
+    """Parse only unambiguous raw additive values for lower-bound checks."""
+    import re
+    items = values if isinstance(values, (list, tuple)) else [values]
+    total = 0.0
+    matched = False
+    patterns = {
+        "weight": [(r"([0-9]+(?:\.[0-9]+)?)\s*(?:吨|t)", 1000.0),
+                   (r"([0-9]+(?:\.[0-9]+)?)\s*(?:公斤|千克|kg)", 1.0),
+                   (r"([0-9]+(?:\.[0-9]+)?)\s*(?:克|g)", 0.001)],
+        "volume": [(r"([0-9]+(?:\.[0-9]+)?)\s*(?:立方米|方|m3)", 1.0),
+                    (r"([0-9]+(?:\.[0-9]+)?)\s*(?:立方厘米|cm3)", 1e-6)],
+    }
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        for pattern, factor in patterns.get(kind, []):
+            match = re.fullmatch(r"\s*" + pattern + r"\s*", item, re.I)
+            if match:
+                total += float(match.group(1)) * factor
+                matched = True
+                break
+    return total if matched else None
+
+
+def _validate_aggregation(result: CargoProfileResult, cargo: Sequence[Mapping[str, Any]]) -> None:
+    """Ensure derived output cannot silently undercount explicit raw details."""
+    tolerance = 1e-6
+    profiles = {profile.name: profile for profile in result.cargo_profiles}
+    if len(profiles) != len(result.cargo_profiles):
+        raise StructuredIntentError("cargo profiles must contain one profile per cargo name")
+    weight_sum = sum(profile.weight_kg for profile in result.cargo_profiles if profile.weight_kg is not None)
+    volume_sum = sum(profile.volume_m3 for profile in result.cargo_profiles if profile.volume_m3 is not None)
+    summary = result.cargo_profile_summary
+    if summary.total_weight_kg is not None and abs(summary.total_weight_kg - weight_sum) > tolerance:
+        raise StructuredIntentError("cargo profile total_weight_kg must equal profile weights")
+    if summary.total_volume_m3 is not None and abs(summary.total_volume_m3 - volume_sum) > tolerance:
+        raise StructuredIntentError("cargo profile total_volume_m3 must equal profile volumes")
+    for raw in cargo:
+        name = str(raw.get("name"))
+        profile = profiles.get(name)
+        if profile is None:
+            continue
+        explicit_weight = _explicit_total(raw.get("weight"), "weight")
+        if explicit_weight is not None and (profile.weight_kg is None or profile.weight_kg + tolerance < explicit_weight):
+            raise StructuredIntentError(f"cargo profile weight undercounts raw details for {name}")
+        explicit_volume = _explicit_total(raw.get("volume"), "volume")
+        if explicit_volume is not None and (profile.volume_m3 is None or profile.volume_m3 + tolerance < explicit_volume):
+            raise StructuredIntentError(f"cargo profile volume undercounts raw details for {name}")
 
 
 def _object(value: Any, label: str) -> Mapping[str, Any]:
@@ -153,8 +205,18 @@ class CargoProfileResolver:
         snapshot = copy.deepcopy([dict(item) for item in cargo])
         message = "【原始货物列表】\n" + json.dumps(snapshot, ensure_ascii=False, indent=2)
         messages = [ChatMessage("system", CARGO_PROFILE_SYSTEM_PROMPT), ChatMessage("user", message)]
-        result = call_with_format_repair(self.client, messages, parse_cargo_profile_from_text, "上一次输出无法解析。请严格只返回约定的货物画像 JSON，不要添加解释或 Markdown。")
-        _validate_against_raw_cargo(result, snapshot)
+        def parse_and_validate(text: str) -> CargoProfileResult:
+            result = parse_cargo_profile_from_text(text)
+            _validate_against_raw_cargo(result, snapshot)
+            _validate_aggregation(result, snapshot)
+            return result
+
+        result = call_with_format_repair(
+            self.client,
+            messages,
+            parse_and_validate,
+            "上一次输出未正确按原始明细累加或汇总不一致。请重新计算所有数组明细，严格只返回约定的货物画像 JSON，不要添加解释或 Markdown。",
+        )
         return result
 
 
