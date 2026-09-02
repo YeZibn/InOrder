@@ -64,6 +64,22 @@ def test_mapper_preserves_location_city_and_full_address():
     assert entities[0].attributes["full_address"] == "上海浦东金桥物流园3号仓库"
 
 
+def test_mapper_preserves_explicit_location_province():
+    entities = map_grounded_extractions([
+        GroundedExtraction("location", "浙江省温州市", {
+            "role": "pickup", "province": "浙江", "city": "温州", "full_address": "浙江省温州市", "action": "set"
+        })
+    ], "从浙江省温州市装货")
+    assert entities[0].attributes["province"] == "浙江"
+
+
+def test_mapper_rejects_invalid_location_province():
+    with pytest.raises(StructuredIntentError, match="province"):
+        map_grounded_extractions([GroundedExtraction("location", "温州", {
+            "role": "pickup", "province": 123, "city": "温州", "action": "set"
+        })], "从温州装货")
+
+
 def test_mapper_rejects_location_full_address_outside_source():
     with pytest.raises(StructuredIntentError, match="full_address"):
         map_grounded_extractions(

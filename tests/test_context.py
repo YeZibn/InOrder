@@ -62,6 +62,7 @@ def test_reducer_preserves_location_city_and_full_address():
                 "set",
                 {
                     "role": "pickup",
+                    "province": "上海",
                     "city": "上海",
                     "full_address": "上海浦东金桥物流园3号仓库",
                 },
@@ -71,6 +72,7 @@ def test_reducer_preserves_location_city_and_full_address():
                 "set",
                 {
                     "role": "dropoff",
+                    "province": "浙江",
                     "city": "温州",
                     "full_address": "温州瓯海批发市场",
                 },
@@ -79,11 +81,13 @@ def test_reducer_preserves_location_city_and_full_address():
     )
     assert context.pickup_location == {
         "role": "pickup",
+        "province": "上海",
         "city": "上海",
         "full_address": "上海浦东金桥物流园3号仓库",
     }
     assert context.dropoff_location == {
         "role": "dropoff",
+        "province": "浙江",
         "city": "温州",
         "full_address": "温州瓯海批发市场",
     }

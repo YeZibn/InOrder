@@ -39,7 +39,7 @@
 
 ### Requirement: Active order context
 
-系统 SHALL 提供单一 active 订单上下文，覆盖 pickup/dropoff、联系人、货物、车型、时间、支付、发票、服务和备注等当前订单字段，并支持稳定序列化。订单上下文 SHALL 在保留原始 `cargo` 列表的同时，可选保存基于完整货物集合生成的 `cargo_profiles` 和 `cargo_profile_summary` 派生字段，并保存本会话稳定复用的 `reference_time` 时间锚点；不得保存历史订单引用或历史订单时间上下文。
+系统 SHALL 提供单一 active 订单上下文，覆盖 pickup/dropoff（地址保留可选 `province`、`city`、`full_address`）、联系人、货物、车型、时间、支付、发票、服务和备注等当前订单字段，并支持稳定序列化。订单上下文 SHALL 在保留原始 `cargo` 列表的同时，可选保存基于完整货物集合生成的 `cargo_profiles` 和 `cargo_profile_summary` 派生字段，并保存本会话稳定复用的 `reference_time` 时间锚点；不得保存历史订单引用或历史订单时间上下文。
 
 #### Scenario: Empty context
 - **WHEN** 创建新的订单上下文

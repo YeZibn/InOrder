@@ -52,6 +52,7 @@ def test_prompt_contains_normalization_rules():
     assert "surname" in p
     assert "full_address" in p
     assert "不得从上下文补全" in p
+    assert "province" in p
 
 
 def test_prompt_separates_vehicle_types_and_specs():
@@ -162,6 +163,35 @@ def test_extract_location_preserves_city_and_full_address():
     assert entities[0].attributes["city"] == "上海"
     assert entities[0].attributes["full_address"] == "上海浦东金桥物流园3号仓库"
     assert entities[1].attributes["full_address"] == "温州瓯海批发市场"
+
+
+def test_extract_location_preserves_explicit_province_without_inference():
+    payload = {"entities": [
+        {"type": "location", "action": "set", "extraction_text": "浙江省温州市瓯海区某市场", "attributes": {
+            "role": "pickup", "province": "浙江", "city": "温州", "full_address": "浙江省温州市瓯海区某市场"
+        }}
+    ]}
+    entities = extract_entities(
+        FakeLLMClient(json.dumps(payload, ensure_ascii=False)),
+        "从浙江省温州市瓯海区某市场装货", [], "2026-08-14 10:00",
+    )
+    assert entities[0].attributes["province"] == "浙江"
+
+
+def test_extract_location_missing_province_remains_null():
+    payload = {"entities": [{"type": "location", "action": "set", "extraction_text": "温州", "attributes": {
+        "role": "pickup", "province": None, "city": "温州", "full_address": "温州"
+    }}]}
+    entities = extract_entities(FakeLLMClient(json.dumps(payload)), "从温州装货", [], "2026-08-14 10:00")
+    assert entities[0].attributes["province"] is None
+
+
+def test_extract_location_rejects_invalid_province():
+    payload = {"entities": [{"type": "location", "action": "set", "extraction_text": "温州", "attributes": {
+        "role": "pickup", "province": 123, "city": "温州", "full_address": "温州"
+    }}]}
+    with pytest.raises(StructuredIntentError, match="province"):
+        extract_entities(FakeLLMClient(json.dumps(payload)), "从温州装货", [], "2026-08-14 10:00")
 
 
 def test_extract_location_without_city_keeps_explicit_full_address():

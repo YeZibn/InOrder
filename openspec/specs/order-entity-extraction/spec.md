@@ -100,7 +100,7 @@
 
 ### Requirement: Entity type coverage
 
-系统 SHALL 支持提取以下 13 类当前订单实体：time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type 和 remark。每类实体拥有其各自的属性字段；其中 location 支持 `role`、`city` 和 `full_address`，cargo 支持 `name`、`weight`、`dimensions`、`volume` 和 `quantity`，time 支持 `start`、`end`，车型实体至少保留 `extraction_text` 及可选的原始表达属性。
+系统 SHALL 支持提取以下 13 类当前订单实体：time、location、person、phone、vehicle_type、vehicle_specs、cargo、follow_car_number、oneself_follow_flag、invoice_type、payment_type、service_type 和 remark。每类实体拥有其各自的属性字段；其中 location 支持 `role`、可选的 `province`、`city` 和 `full_address`，cargo 支持 `name`、`weight`、`dimensions`、`volume` 和 `quantity`，time 支持 `start`、`end`，车型实体至少保留 `extraction_text` 及可选的原始表达属性。
 
 #### Scenario: Location with role extraction
 
@@ -111,6 +111,14 @@
 
 - **WHEN** 用户输入"从上海浦东金桥物流园3号仓库运到温州瓯海批发市场"
 - **THEN** 系统输出 pickup 与 dropoff 实体，分别包含对应的 `city` 和 `full_address`
+
+#### Scenario: Location with explicit province
+- **WHEN** 用户输入"从浙江省温州市运到上海市浦东新区"
+- **THEN** 系统输出 pickup 的 `province=浙江`、`city=温州`，以及 dropoff 的 `province=上海`、`city=上海`
+
+#### Scenario: Location without explicit province
+- **WHEN** 用户只输入"从温州运到上海"且原文没有省级表达
+- **THEN** 系统 SHALL 保持两个 location 的 `province=null`，不得根据城市常识补全省份
 
 #### Scenario: Time extraction without business context
 
@@ -138,7 +146,7 @@
 
 ### Requirement: Location semantic rules
 
-系统 SHALL 按"从A到B"语义规则确定 location 的 role：A=装货地（pickup）、B=卸货地（dropoff）；"送到X"/"拉到X"→X=卸货地；"到X装货"/"去X取货"→X=装货地。`city` SHALL 仅当用户明确提及城市名时输出，不带"市"后缀；`full_address` SHALL 保存用户本轮明确表达的完整地址，至少包含城市表达，不能通过本地逻辑补全、改写或地理编码。
+系统 SHALL 按"从A到B"语义规则确定 location 的 role：A=装货地（pickup）、B=卸货地（dropoff）；"送到X"/"拉到X"→X=卸货地；"到X装货"/"去X取货"→X=装货地。`province` 与 `city` SHALL 仅当用户明确提及时输出，并去除“省”“市”等行政区后缀；`full_address` SHALL 保存用户本轮明确表达的完整地址，至少包含城市表达，不能通过本地逻辑补全、改写或地理编码。
 
 #### Scenario: From-to location roles
 - **WHEN** 用户输入"从上海运货到温州"
@@ -148,6 +156,10 @@
 
 - **WHEN** 用户输入"从上海市浦东新区金桥镇某物流园A区3号仓库送到浙江省温州市瓯海区某批发市场"
 - **THEN** 系统分别输出 pickup 和 dropoff，保留各自连续原文地址到 `full_address`，并提取明确可识别的 `city`
+
+#### Scenario: Preserve explicit province and suffix normalization
+- **WHEN** 用户输入"浙江省温州市瓯海区某批发市场"
+- **THEN** location SHALL 输出 `province=浙江`、`city=温州`，并将完整连续原文保留到 `full_address`
 
 #### Scenario: Implicit dropoff location
 - **WHEN** 用户输入"送到杭州"
@@ -222,4 +234,3 @@ extract 函数 SHALL 接受三个显式输入参数：`message`（用户本次�
 
 - **WHEN** 测试或运行时注入一个实现提取接口的后端
 - **THEN** 订单图可以使用该后端完成提取而无需修改图节点
-

@@ -25,7 +25,7 @@ def _entity_from_grounded(item: GroundedExtraction) -> Entity:
     if item.extraction_class == "location":
         if attrs.get("role") not in ("pickup", "dropoff"):
             raise StructuredIntentError("location requires attributes.role: pickup or dropoff")
-        for field_name in ("city", "full_address"):
+        for field_name in ("province", "city", "full_address"):
             value = attrs.get(field_name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise StructuredIntentError(f"location {field_name} must be a non-empty string or null")
