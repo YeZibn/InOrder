@@ -11,7 +11,7 @@ from .infrastructure.llm import (
 from .infrastructure.llm import ChatMessage, LLMResponse, Usage
 from .intent import (
     IntentPlan, IntentPlanningError, IntentPlanValidationError,
-    IntentStep, LLMIntentModel, validate_plan,
+    LLMIntentModel, validate_plan,
 )
 from .graph.intent import IntentGraph, IntentGraphState, build_intent_graph
 from .normalization import (
@@ -39,7 +39,7 @@ __all__ = [
     "LLMClient", "LLMConfig", "load_config", "ChatMessage", "LLMResponse", "Usage",
     "LLMError", "ConfigurationError", "InvalidRequestError", "AuthenticationError",
     "RateLimitError", "TimeoutError", "UpstreamError",
-    "IntentPlan", "IntentStep", "IntentPlanningError",
+    "IntentPlan", "IntentPlanningError",
     "IntentPlanValidationError", "LLMIntentModel", "validate_plan",
     "IntentGraph", "IntentGraphState", "build_intent_graph",
     "NormalizationError", "normalize_entity", "normalize_entities",

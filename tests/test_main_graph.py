@@ -17,10 +17,6 @@ class IntentModel:
         self.calls.append(("main", message))
         return {"main_intent": self.main, "confidence": 0.9}
 
-    def extract_sub_intents(self, message, main_intent):
-        self.calls.append(("sub", message, main_intent))
-        return self.candidates
-
 
 class Rewrite:
     def __init__(self): self.calls = []
@@ -55,11 +51,11 @@ def test_parent_routes_qa_without_order_subgraph():
     assert result["order_result"] if "order_result" in result else True
     assert rewrite.calls == []
     assert extract.calls == []
-    assert result["intent_result"]["intent_plan"].main_intent == "qa"
+    assert result["intent_result"]["main_intent"] == "qa"
 
 
 def test_parent_routes_order_and_passes_context_to_child():
-    intent = IntentModel("order", [{"id": "step_1", "name": "create_order"}])
+    intent = IntentModel("order")
     rewrite, extract = Rewrite(), Extract()
     graph = build_main_graph(build_intent_graph(intent), build_order_processing_graph(rewrite, extract))
     result = graph.invoke({**state(), "message": "我要运货"})
@@ -74,7 +70,7 @@ def test_parent_routes_order_and_passes_context_to_child():
 
 
 def test_parent_propagates_child_errors():
-    intent = IntentModel("order", [{"id": "step_1", "name": "create_order"}])
+    intent = IntentModel("order")
     class FailingRewrite:
         def rewrite(self, message, history, order_context):
             raise ValueError("rewrite failed")

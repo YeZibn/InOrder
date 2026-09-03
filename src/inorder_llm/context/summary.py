@@ -15,8 +15,7 @@ def to_data(value):
 
 def intent_view(result):
     """Intent result view, unwrapping dataclass intent plans."""
-    plan = result.get("intent_plan") if isinstance(result, dict) else None
-    return to_data(plan) if plan is not None else result
+    return to_data(result)
 
 
 def order_summary_view(result) -> Dict[str, Any] | None:

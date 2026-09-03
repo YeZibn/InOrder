@@ -61,7 +61,7 @@ class MainGraph(BaseGraph[MainGraphState]):
     def _finalize(state: MainGraphState) -> Mapping[str, Any]:
         intent_data = {
             key: state[key]
-            for key in ("main_intent", "main_confidence", "intent_plan", "sub_intents", "needs_clarification", "clarification_reason")
+            for key in ("main_intent", "main_confidence")
             if key in state
         }
         order_keys = (

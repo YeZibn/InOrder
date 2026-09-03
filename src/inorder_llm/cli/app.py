@@ -67,10 +67,6 @@ def _assistant_summary(result, chain: str, mode: Optional[str] = None):
         data = _intent_data(intent_result)
         intent = data.get("main_intent") if isinstance(data, dict) else None
         text = "主意图：" + str(intent or "未知")
-        sub = data.get("sub_intents", []) if isinstance(data, dict) else []
-        names = [(_data(item).get("name") or "") for item in sub]
-        if names:
-            text += "；子意图：" + "、".join(name for name in names if name)
         if result.get("qa_placeholder"):
             text += "；问答入口尚未实现"
         return text, {"chain": "full", "main_intent": intent}
@@ -87,10 +83,7 @@ def _assistant_summary(result, chain: str, mode: Optional[str] = None):
         }
     data = _intent_data(result)
     intent = data.get("main_intent") if isinstance(data, dict) else None
-    sub = data.get("sub_intents", []) if isinstance(data, dict) else []
-    names = [(_data(item).get("name") or "") for item in sub]
     text = "已识别主意图：" + str(intent or "未知")
-    if names: text += "；子意图：" + "、".join(name for name in names if name)
     return text + "。", {"chain": "intent", "main_intent": intent}
 
 
@@ -136,18 +129,10 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
         elif result.get("qa_placeholder"):
             text.append(result["qa_placeholder"])
         return "\n".join(text)
-    plan = result.get("intent_plan") if isinstance(result, dict) else getattr(result, "intent_plan", result)
-    if plan is None: return "未生成意图计划。"
-    data = _data(plan)
+    data = _data(result)
+    if not isinstance(data, dict): return "未生成意图识别结果。"
     if mode == "plan": return json.dumps(data, ensure_ascii=False, indent=2)
     lines = ["链路：intent（仅识别，未执行业务）", "主意图：" + str(data.get("main_intent"))]
-    if data.get("sub_intents"):
-        lines.append("子意图：")
-        for step in data["sub_intents"]:
-            item = _data(step)
-            lines.append("  - " + item["name"])
-            if item.get("depends_on"): lines.append("    依赖：" + ", ".join(item["depends_on"]))
-    if data.get("needs_clarification"): lines.append("需要澄清：" + str(data.get("clarification_reason") or "未提供原因"))
     return "\n".join(lines)
 
 

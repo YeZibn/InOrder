@@ -13,7 +13,7 @@ class FakeGraph:
 
     def invoke(self, state):
         self.calls.append(state)
-        return {"intent_plan": {"main_intent": "order", "sub_intents": [{"name": "create_order"}], "needs_clarification": False}}
+        return {"main_intent": "order", "confidence": 0.9}
 
 
 def test_parser_commands_and_messages():
@@ -41,7 +41,7 @@ def test_messages_route_to_graph_and_plan_formats():
     graph = FakeGraph()
     cli = IntentCli(graph=graph)
     output = cli.handle_message("我要下单")
-    assert "create_order" in output
+    assert "order" in output
     assert graph.calls == [{"message": "我要下单"}]
 
 
@@ -60,7 +60,7 @@ def test_scripted_session_supports_intent_and_exit():
     cli = IntentCli(graph=graph, input_fn=lambda _: next(lines), output_fn=outputs.append)
     cli.run()
     assert cli.session.mode == "plan"
-    assert any("create_order" in item for item in outputs)
+    assert any("order" in item for item in outputs)
 
 
 class FakeIntentGraph:
@@ -72,11 +72,7 @@ class FakeIntentGraph:
         self.calls.append(state)
         return {
             "main_intent": self.main,
-            "intent_plan": {
-                "main_intent": self.main,
-                "sub_intents": [{"name": "create_order"}] if self.main == "order" else [],
-                "needs_clarification": False,
-            },
+            "confidence": 0.9,
         }
 
 
@@ -220,7 +216,7 @@ def test_successful_message_appends_concise_assistant_summary_only():
     assert [turn.role for turn in turns] == ["user", "assistant"]
     assistant = turns[-1]
     assert "order" in assistant.content
-    assert "create_order" in assistant.content
+    assert "create_order" not in assistant.content
     assert "Entity" not in assistant.content
     assert "OrderContext" not in assistant.content
     assert "raw" not in assistant.content
@@ -244,7 +240,7 @@ def test_cli_retry_replays_pending_user_without_duplicate_turn():
         def invoke(self, state):
             self.calls.append(state)
             if len(self.calls) == 1: raise RuntimeError("gateway failed")
-            return {"main_intent": "qa", "intent_plan": {"main_intent": "qa", "sub_intents": []}}
+            return {"main_intent": "qa", "confidence": 0.9}
     graph = RecoveringGraph()
     cli = IntentCli(graph=graph)
     with pytest.raises(RuntimeError): cli.handle_message("我要运苹果")

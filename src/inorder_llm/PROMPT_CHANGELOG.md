@@ -24,6 +24,18 @@
 
 ### `MAIN_INTENT_SYSTEM_PROMPT`（`intent/resolver.py`）
 
+#### 2026-09-02
+
+- **变更摘要**:
+  - 意图识别收敛为 `order`/`qa` 主意图二分类，Prompt 明确禁止输出子意图、订单字段或澄清信息。
+  - 咨询信号改为结合完整语义判断，增加“可以帮我运一吨苹果吗”应判定为 `order` 的边界示例。
+  - 输出契约强调仅允许 `main_intent` 与 `confidence`。
+- **原因**: 子意图结果不参与父图路由，额外 LLM 调用增加延迟、成本和格式失败概率；关键词闸门也会误判礼貌执行请求。
+- **关联**: OpenSpec change `simplify-intent-to-main-only`。
+- **评测结果**:
+  - 主意图、图路由、父图和 CLI 相关测试通过（37 passed）。
+  - 完整测试与 OpenSpec 校验将在实现收尾时执行。
+
 #### 2026-08-15
 
 - **变更摘要**:

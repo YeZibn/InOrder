@@ -26,7 +26,7 @@
 
 #### Scenario: Intent subgraph remains independently callable
 - **WHEN** 调用方直接使用意图链路
-- **THEN** 意图子图仍可独立执行并返回原有 `intent_plan`，不强制要求 SSE 调用方
+- **THEN** 意图子图仍可独立执行并返回主意图分类结果，不调用子意图识别
 
 #### Scenario: Order subgraph remains independently callable
 - **WHEN** 调用方直接使用下单链路
@@ -67,4 +67,3 @@ MainGraph SHALL 为 full 工作流提供稳定的公开生命周期：开始、�
 
 - **WHEN** 主意图为 `qa` 并进入终止分支
 - **THEN** 系统只发送开始、意图识别、完成和终态事件，不发送订单子图节点或订单上下文事件
-

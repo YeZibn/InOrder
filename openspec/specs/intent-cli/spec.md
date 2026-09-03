@@ -77,7 +77,7 @@
 #### Scenario: Intent chain
 
 - **WHEN** 当前链路为 `intent` 且用户输入普通消息
-- **THEN** 系统调用意图图并输出意图计划
+- **THEN** 系统调用意图图并输出主意图分类结果
 
 #### Scenario: Order chain
 
@@ -110,5 +110,4 @@ CLI SHALL 只展示意图识别结果和模式状态，不执行订单查询、�
 
 #### Scenario: Order message in CLI
 - **WHEN** 用户在任意模式输入订单相关消息
-- **THEN** CLI 只输出识别计划，不产生业务数据副作用
-
+- **THEN** CLI 只输出主意图识别结果，不产生业务数据副作用
