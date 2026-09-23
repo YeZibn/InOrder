@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -19,6 +20,12 @@ class FakeGraph:
         if self.error:
             raise self.error
         return self.result
+
+    async def astream(self, state, stream_mode="updates", subgraphs=False, version="v2"):
+        yield {"type": "updates", "ns": [], "data": {"finalize": self.invoke(state)}}
+
+    async def ainvoke(self, state):
+        return self.invoke(state)
 
 
 class StreamingGraph(FakeGraph):
@@ -56,6 +63,15 @@ class NestedV2StreamingGraph(FakeGraph):
         yield {"type": "updates", "ns": ["order_subgraph:run"], "data": {"rewrite": {"rewrite_result": {"rewritten_text": "x"}}}}
         yield {"type": "updates", "ns": ["order_subgraph:run"], "data": {"extract": {"entities": []}}}
         yield {"type": "updates", "ns": [], "data": {"order_subgraph": {"order_graph_entered": True}}}
+
+
+class AsyncNestedV2StreamingGraph(NestedV2StreamingGraph):
+    async def astream(self, state, stream_mode="updates", subgraphs=False, version="v2"):
+        for update in self.stream(state, stream_mode, subgraphs, version):
+            yield update
+
+    async def ainvoke(self, state):
+        return self.invoke(state)
 
 
 def frames(text):
@@ -128,6 +144,17 @@ def test_adapter_parses_v2_nested_updates_and_keeps_terminal_events():
     events = list(WorkflowEventAdapter(NestedV2StreamingGraph()).events({"session_id": "s"}))
     steps = [event.payload for event in events if event.type == EventType.THINKING_STEP and "node" in event.payload]
     assert [step["node"] for step in steps] == ["rewrite", "extract"]
+    assert [event.type for event in events[-2:]] == [EventType.THINKING_DONE, EventType.DONE]
+
+
+def test_async_adapter_preserves_nested_node_order_and_terminal_events():
+    async def collect():
+        return [event async for event in WorkflowEventAdapter(AsyncNestedV2StreamingGraph()).aevents({"session_id": "s"})]
+
+    events = asyncio.run(collect())
+    steps = [event.payload for event in events if event.type == EventType.THINKING_STEP and "node" in event.payload]
+    assert [step["node"] for step in steps] == ["rewrite", "extract"]
+    assert [step["sequence"] for step in steps] == [1, 2]
     assert [event.type for event in events[-2:]] == [EventType.THINKING_DONE, EventType.DONE]
 
 

@@ -127,6 +127,28 @@ def test_injectable_backend_receives_context_and_maps_result():
     assert "从温州到上海" not in received[0]
 
 
+@pytest.mark.parametrize("mode", ["chat_completions", "responses"])
+def test_langextract_provider_has_single_worker_finite_timeout_and_no_sdk_retry(monkeypatch, mode):
+    import langextract as lx
+    captured = {}
+
+    def fake_extract(*args, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(lx, "extract", fake_extract)
+    extractor = LangExtractEntityExtractor(
+        LLMConfig("key", "https://example.test/v1", "demo", timeout=3.5, api_mode=mode)
+    )
+    assert extractor.extract("苹果", "2026-08-17 10:00") == []
+    assert captured["max_workers"] == 1
+    assert captured["extraction_passes"] == 1
+    provider = captured["model"]
+    assert provider.max_workers == 1
+    assert provider._client.max_retries == 0
+    assert provider._client.timeout == 3.5
+
+
 def test_reducer_prefers_mapped_action_attribute():
     updated = OrderContextReducer().apply(
         OrderContext(),

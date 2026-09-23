@@ -6,7 +6,7 @@ from typing import Any, Mapping, Optional
 from ..context.models import HistoryConversation, OrderContext
 from ..infrastructure.llm import ChatMessage, LLMClient
 from ..infrastructure.llm.text import strip_json_prefix
-from ..infrastructure.llm.structured import call_with_format_repair
+from ..infrastructure.llm.structured import call_with_format_repair, acall_with_format_repair
 from ..intent.resolver import StructuredIntentError
 from ..reference_time import resolve_reference_time
 from .models import RewriteResult
@@ -110,6 +110,14 @@ class OrderRewriteModel:
         user_message = _build_user_message(message, history, order_context, history_limit, reference_time)
         messages = [ChatMessage("system", REWRITE_SYSTEM_PROMPT), ChatMessage("user", user_message)]
         return call_with_format_repair(self.client, messages, parse_rewrite_from_text, "上一次输出无法解析。请严格只返回 rewritten_text 和 extraction_text 两个字符串字段组成的 JSON 对象。")
+
+    async def arewrite(self, message: str, history: HistoryConversation, order_context: OrderContext, history_limit: Optional[int] = 12, reference_time: Optional[str] = None, deadline_at: float = None) -> RewriteResult:
+        if not message:
+            raise ValueError("rewrite message must not be empty")
+        anchor = resolve_reference_time(reference_time)
+        user_message = _build_user_message(message, history, order_context, history_limit, anchor)
+        messages = [ChatMessage("system", REWRITE_SYSTEM_PROMPT), ChatMessage("user", user_message)]
+        return await acall_with_format_repair(self.client, messages, parse_rewrite_from_text, "上一次输出无法解析。请严格只返回 rewritten_text 和 extraction_text 两个字符串字段组成的 JSON 对象。", deadline_at)
 
 
 def rewrite_order_request(

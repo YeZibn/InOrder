@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from ..infrastructure.llm import ChatMessage, LLMClient
 from ..infrastructure.llm.text import strip_json_prefix
-from ..infrastructure.llm.structured import call_with_format_repair
+from ..infrastructure.llm.structured import call_with_format_repair, acall_with_format_repair
 from ..intent.resolver import StructuredIntentError
 from .models import CargoProfile, CargoProfileResult, CargoProfileSummary
 
@@ -218,6 +218,17 @@ class CargoProfileResolver:
             "上一次输出未正确按原始明细累加或汇总不一致。请重新计算所有数组明细，严格只返回约定的货物画像 JSON，不要添加解释或 Markdown。",
         )
         return result
+
+    async def aprofile(self, cargo: Sequence[Mapping[str, Any]], deadline_at: float = None) -> CargoProfileResult:
+        snapshot = copy.deepcopy([dict(item) for item in cargo])
+        message = "【原始货物列表】\n" + json.dumps(snapshot, ensure_ascii=False, indent=2)
+        messages = [ChatMessage("system", CARGO_PROFILE_SYSTEM_PROMPT), ChatMessage("user", message)]
+        def parse_and_validate(text: str) -> CargoProfileResult:
+            result = parse_cargo_profile_from_text(text)
+            _validate_against_raw_cargo(result, snapshot)
+            _validate_aggregation(result, snapshot)
+            return result
+        return await acall_with_format_repair(self.client, messages, parse_and_validate, "上一次输出未正确按原始明细累加或汇总不一致。请重新计算所有数组明细，严格只返回约定的货物画像 JSON，不要添加解释或 Markdown。", deadline_at)
 
 
 __all__ = ["CARGO_PROFILE_SYSTEM_PROMPT", "CargoProfileResolver", "parse_cargo_profile_result", "parse_cargo_profile_from_text"]

@@ -18,3 +18,13 @@ def call_with_format_repair(client, messages: Sequence[ChatMessage], parser: Cal
             return parser(repaired.text)
         except Exception:
             raise first_error
+
+
+async def acall_with_format_repair(client, messages: Sequence[ChatMessage], parser: Callable[[str], T], repair_instruction: str, deadline_at: float = None) -> T:
+    """Async equivalent; transport/deadline failures during repair propagate."""
+    response = await client.achat(messages, deadline_at=deadline_at)
+    try:
+        return parser(response.text)
+    except Exception:
+        repaired = await client.achat([*messages, ChatMessage("user", repair_instruction)], deadline_at=deadline_at)
+        return parser(repaired.text)

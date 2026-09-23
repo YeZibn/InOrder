@@ -5,8 +5,10 @@ from typing import Any, Mapping
 from langgraph.graph import END, START, StateGraph
 
 from ..base import BaseGraph
+from ..runnable import dual_node
 from ..intent.graph import build_intent_graph
 from ..order.graph import build_order_processing_graph
+from ...extract.langextract_adapter import LangExtractEntityExtractor
 from .routing import route_main_graph
 from .state import MainGraphState
 
@@ -20,17 +22,18 @@ def _as_dict(value: Any) -> dict:
 
 
 class MainGraph(BaseGraph[MainGraphState]):
-    def __init__(self, intent_graph, order_graph):
+    def __init__(self, intent_graph, order_graph, executor=None):
         self.intent_graph = intent_graph
         self.order_graph = order_graph
+        self.executor = executor
 
     def build(self):
         builder = StateGraph(MainGraphState)
         builder.add_node("intent_subgraph", self.intent_graph)
         builder.add_node("order_subgraph", self.order_graph)
-        builder.add_node("mark_order_entered", self._mark_order_entered)
-        builder.add_node("qa_terminal", self._qa_terminal)
-        builder.add_node("finalize", self._finalize)
+        builder.add_node("mark_order_entered", dual_node(self._mark_order_entered, self.executor))
+        builder.add_node("qa_terminal", dual_node(self._qa_terminal, self.executor))
+        builder.add_node("finalize", dual_node(self._finalize, self.executor))
         builder.add_edge(START, "intent_subgraph")
         builder.add_conditional_edges(
             "intent_subgraph",
@@ -85,15 +88,18 @@ class MainGraph(BaseGraph[MainGraphState]):
         return result
 
 
-def build_main_graph(intent_graph, order_graph):
+def build_main_graph(intent_graph, order_graph, executor=None):
     """Compile a parent graph from already-built intent and order subgraphs."""
-    return MainGraph(intent_graph, order_graph).compile()
+    return MainGraph(intent_graph, order_graph, executor).compile()
 
 
-def build_main_graph_from_models(intent_model, rewrite_model, extractor, profile_model=None, vehicle_model=None):
+def build_main_graph_from_models(intent_model, rewrite_model, extractor, profile_model=None, vehicle_model=None, capacity=None):
+    executor = capacity.sync_nodes if capacity is not None else None
+    extract_executor = capacity.langextract if capacity is not None and isinstance(extractor, LangExtractEntityExtractor) else executor
     return build_main_graph(
-        build_intent_graph(intent_model),
-        build_order_processing_graph(rewrite_model, extractor, profile_model, vehicle_model),
+        build_intent_graph(intent_model, executor),
+        build_order_processing_graph(rewrite_model, extractor, profile_model, vehicle_model, executor, extract_executor, capacity.llm if capacity is not None and isinstance(extractor, LangExtractEntityExtractor) else None),
+        executor,
     )
 
 

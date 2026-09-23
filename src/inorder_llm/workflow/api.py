@@ -1,7 +1,8 @@
 """HTTP/SSE boundary for the full LangGraph workflow."""
 
-import os
+import asyncio
 import time
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
@@ -11,7 +12,9 @@ from ..context.recovery import ConversationRecovery, prepare_conversation_recove
 from ..context.summary import summarize_assistant
 from ..reference_time import ReferenceTimeError, resolve_context_reference_time
 from .adapter import WorkflowEventAdapter
+from .capacity import CapacityLease, WorkerCapacity, WorkflowOverloadedError
 from .events import error_event
+from .runtime import WorkflowRuntimeConfig
 
 try:
     from fastapi import FastAPI, Request
@@ -47,10 +50,38 @@ def _history(value: Any) -> HistoryConversation:
     return history
 
 
-def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = None):
+def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = None, runtime_config: WorkflowRuntimeConfig | None = None, capacity: WorkerCapacity | None = None, shutdown_callback=None):
     if FastAPI is None:
         raise RuntimeError("SSE API requires fastapi and uvicorn")
-    app = FastAPI(title="InOrder API", version="2")
+    runtime_config = runtime_config or WorkflowRuntimeConfig.from_environ()
+    capacity = capacity or WorkerCapacity(runtime_config)
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        try:
+            yield
+        finally:
+            try:
+                if shutdown_callback is not None:
+                    await shutdown_callback()
+            finally:
+                capacity.close()
+
+    app = FastAPI(title="InOrder API", version="2", lifespan=lifespan)
+    app.state.workflow_config = runtime_config
+    app.state.capacity = capacity
+    app.state.workflow_gate = capacity.workflow
+
+    class AdmittedStreamingResponse(StreamingResponse):
+        def __init__(self, *args, lease: CapacityLease, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._lease = lease
+
+        async def __call__(self, scope, receive, send):
+            try:
+                await super().__call__(scope, receive, send)
+            finally:
+                await asyncio.shield(self._lease.release())
 
     frontend_path = Path(__file__).resolve().parents[3] / "frontend" / "index.html"
 
@@ -98,23 +129,35 @@ def create_app(main_graph=None, graph_factory: Optional[Callable[[], Any]] = Non
                 "order_context": order_context,
                 "reference_time": resolved_reference_time,
                 "user_location": payload.user_location or {},
-                "deadline_at": time.monotonic() + float(os.getenv("WORKFLOW_TIMEOUT_SECONDS", "90")),
+                "deadline_at": time.monotonic() + runtime_config.workflow_timeout_seconds,
             }
         except (ValidationError, ReferenceTimeError, ValueError, TypeError) as exc:
             return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": str(exc)}}, status_code=422)
 
+        try:
+            lease = await capacity.workflow.acquire(
+                deadline_at=state["deadline_at"],
+                disconnected=request.is_disconnected,
+                deadline_is_overload=True,
+            )
+        except WorkflowOverloadedError:
+            return JSONResponse(
+                {"error": {"code": "WORKFLOW_OVERLOADED", "message": "服务繁忙，请稍后重试"}},
+                status_code=503,
+            )
+
         async def stream():
             try:
-                for event in WorkflowEventAdapter(resolve_graph()).events(state):
+                async for event in WorkflowEventAdapter(resolve_graph()).aevents(state):
                     if await request.is_disconnected():
                         return
                     if event.type.value == "DONE":
                         event = _with_recovery_history(event, recovery, state_history)
                     yield event.frame()
-            except BaseException as exc:
+            except Exception as exc:
                 yield error_event(exc).frame()
 
-        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        return AdmittedStreamingResponse(stream(), lease=lease, media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     return app
 

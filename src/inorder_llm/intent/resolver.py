@@ -3,7 +3,7 @@ from typing import Any, Mapping
 
 from ..infrastructure.llm import ChatMessage, LLMClient
 from ..infrastructure.llm.text import strip_json_prefix
-from ..infrastructure.llm.structured import call_with_format_repair
+from ..infrastructure.llm.structured import call_with_format_repair, acall_with_format_repair
 from .protocols import IntentModel
 
 
@@ -75,6 +75,21 @@ class LLMIntentModel:
         if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
             raise StructuredIntentError("confidence must be a number between 0 and 1")
         return {"main_intent": value["main_intent"], "confidence": float(confidence)}
+
+    async def aclassify_main_intent(self, message: str, deadline_at: float = None) -> Mapping[str, Any]:
+        def parse(text):
+            try:
+                value = json.loads(strip_json_prefix(text))
+            except (TypeError, ValueError) as exc:
+                raise StructuredIntentError("LLM returned invalid intent JSON") from exc
+            if not isinstance(value, dict) or value.get("main_intent") not in ("order", "qa"):
+                raise StructuredIntentError("main_intent must be order or qa")
+            confidence = value.get("confidence")
+            if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
+                raise StructuredIntentError("confidence must be a number between 0 and 1")
+            return {"main_intent": value["main_intent"], "confidence": float(confidence)}
+        messages = [ChatMessage("system", MAIN_INTENT_SYSTEM_PROMPT), ChatMessage("user", message)]
+        return await acall_with_format_repair(self.client, messages, parse, "上一次输出无法解析。请严格只返回符合要求的 JSON 对象，不要添加解释或 Markdown。", deadline_at)
 
 
 __all__ = ["LLMIntentModel", "StructuredIntentError", "MAIN_INTENT_SYSTEM_PROMPT"]

@@ -43,6 +43,16 @@ class RewriteNode(BaseNode[OrderGraphState]):
             "rewrite_result": result,
         }
 
+    def supports_async(self) -> bool:
+        return callable(getattr(self.model, "arewrite", None))
+
+    async def arun(self, state: OrderGraphState) -> Dict[str, Any]:
+        result = await self.model.arewrite(
+            state["message"], state["history"], state["order_context"],
+            reference_time=state.get("reference_time"), deadline_at=state.get("deadline_at"),
+        )
+        return {"rewrite_result": result}
+
 
 class ExtractNode(BaseNode[OrderGraphState]):
     name = "extract"
@@ -55,6 +65,16 @@ class ExtractNode(BaseNode[OrderGraphState]):
         entities = self.extractor.extract(
             rewrite_result.extraction_text,
             state["reference_time"],
+        )
+        return {"entities": entities}
+
+    def supports_async(self) -> bool:
+        return callable(getattr(self.extractor, "aextract", None))
+
+    async def arun(self, state: OrderGraphState) -> Dict[str, Any]:
+        entities = await self.extractor.aextract(
+            state["rewrite_result"].extraction_text, state["reference_time"],
+            deadline_at=state.get("deadline_at"),
         )
         return {"entities": entities}
 
@@ -94,6 +114,23 @@ class CargoProfileNode(BaseNode[OrderGraphState]):
             "order_context": updated,
             "cargo_profile_updated": updated != original,
         }
+
+    def supports_async(self) -> bool:
+        return callable(getattr(self.model, "aprofile", None))
+
+    async def arun(self, state: OrderGraphState) -> Dict[str, Any]:
+        from copy import deepcopy
+        original = state["order_context"]
+        updated = deepcopy(original)
+        if not original.cargo:
+            updated.cargo_profiles = []
+            updated.cargo_profile_summary = None
+            return {"order_context": updated, "cargo_profile_updated": updated != original}
+        result = await self.model.aprofile(deepcopy(original.cargo), deadline_at=state.get("deadline_at"))
+        payload = result.to_dict() if hasattr(result, "to_dict") else result
+        updated.cargo_profiles = deepcopy(payload["cargo_profiles"])
+        updated.cargo_profile_summary = deepcopy(payload["cargo_profile_summary"])
+        return {"order_context": updated, "cargo_profile_updated": updated != original}
 
 
 class FinalizeNode(BaseNode[OrderGraphState]):

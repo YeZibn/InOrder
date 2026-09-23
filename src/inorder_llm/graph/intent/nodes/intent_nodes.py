@@ -19,6 +19,16 @@ class MainIntentNode(BaseNode):
             raise IntentPlanValidationError("invalid main_intent")
         return {"main_intent": main_intent, "main_confidence": result.get("confidence")}
 
+    def supports_async(self) -> bool:
+        return callable(getattr(self.model, "aclassify_main_intent", None))
+
+    async def arun(self, state) -> Dict[str, Any]:
+        result = await self.model.aclassify_main_intent(state["message"], deadline_at=state.get("deadline_at"))
+        main_intent = result.get("main_intent")
+        if main_intent not in ("order", "qa"):
+            raise IntentPlanValidationError("invalid main_intent")
+        return {"main_intent": main_intent, "main_confidence": result.get("confidence")}
+
 
 class FinalizeNode(BaseNode):
     name = "finalize"

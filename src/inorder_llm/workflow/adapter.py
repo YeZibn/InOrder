@@ -1,7 +1,9 @@
 """Observe a compiled MainGraph without duplicating child graph nodes."""
 
+import asyncio
 from collections.abc import Iterator, Mapping
 from copy import deepcopy
+from dataclasses import dataclass, field
 import inspect
 import time
 from typing import Any
@@ -42,6 +44,15 @@ _NODE_TEXT = {
 _PUBLIC_STAGES = {"intent", "order", "cargo_profile", "vehicle"}
 
 
+@dataclass
+class _Observed:
+    result: dict[str, Any] | None = None
+    emitted: set[str] = field(default_factory=set)
+    emitted_nodes: set[tuple] = field(default_factory=set)
+    nested_seen: bool = False
+    sequence: int = 0
+
+
 class WorkflowEventAdapter:
     """Turn one parent-graph execution into safe lifecycle events.
 
@@ -55,74 +66,108 @@ class WorkflowEventAdapter:
 
     def events(self, state: Mapping[str, Any]) -> Iterator[WorkflowEvent]:
         yield WorkflowEvent(EventType.THINKING_START, {"title": "开始处理", "stage": "start"})
-        result: dict[str, Any] | None = None
-        emitted = set()
-        emitted_nodes = set()
-        nested_seen = False
-        sequence = 0
+        observed = _Observed()
         try:
             stream = getattr(self.graph, "stream", None)
             if callable(stream):
-                # Consume updates to retain synchronous final semantics while observing boundaries.
-                stream_kwargs = {"stream_mode": "updates"}
-                # Compatibility fakes and older graph wrappers may not expose
-                # the subgraphs argument.  Real LangGraph graphs do, and this
-                # is what gives us the child-node boundaries.
-                try:
-                    parameters = inspect.signature(stream).parameters
-                    if "subgraphs" in parameters or any(
-                        parameter.kind is inspect.Parameter.VAR_KEYWORD
-                        for parameter in parameters.values()
-                    ):
-                        stream_kwargs["subgraphs"] = True
-                    if "version" in parameters:
-                        stream_kwargs["version"] = "v2"
-                except (TypeError, ValueError):
-                    pass
-                for update in stream(dict(state), **stream_kwargs):
+                for update in stream(dict(state), **self._stream_kwargs(stream)):
                     self._check_deadline(state)
-                    namespace, data = self._stream_update(update)
-                    if not isinstance(data, Mapping):
-                        continue
-                    is_nested = bool(namespace)
-                    nested_seen = nested_seen or is_nested
-                    for node, value in data.items():
-                        node = self._node_name(node)
-                        if is_nested:
-                            public = self._public_node(node)
-                            node_key = (namespace, node)
-                            if public and node_key not in emitted_nodes:
-                                emitted_nodes.add(node_key)
-                                emitted.add(public[0])
-                                sequence += 1
-                                yield self._step(public[0], public[1], sequence, node=node)
-                        elif not nested_seen:
-                            # Legacy graph wrappers expose only parent updates;
-                            # retain the previous aggregate-stage behavior.
-                            public = self._public_stage(node, value)
-                            if public and public[0] not in emitted:
-                                emitted.add(public[0])
-                                sequence += 1
-                                yield self._step(public[0], public[1], sequence)
-                        if isinstance(value, Mapping):
-                            result = {**(result or {}), **value}
-                        elif not is_nested:
-                            result = {**(result or {}), node: value}
-                    # v2/v1 child updates can expose the state directly rather
-                    # than nested under a node key. Preserve those fields for
-                    # final-result compatibility without exposing them in SSE.
-                    if is_nested and not any(isinstance(value, Mapping) for value in data.values()):
-                        result = {**(result or {}), **data}
-                if result is None:
-                    result = dict(self.graph.invoke(dict(state)))
+                    yield from self._consume_update(update, observed)
+                if observed.result is None:
+                    observed.result = dict(self.graph.invoke(dict(state)))
             else:
                 self._check_deadline(state)
-                result = dict(self.graph.invoke(dict(state)))
+                observed.result = dict(self.graph.invoke(dict(state)))
             self._check_deadline(state)
-        except BaseException as exc:
-            yield error_event(exc, self._error_stage(emitted))
+        except Exception as exc:
+            yield error_event(exc, self._error_stage(observed.emitted))
             return
+        yield from self._finish(state, observed)
 
+    async def aevents(self, state: Mapping[str, Any]):
+        """Observe a compiled async graph without blocking the API event loop."""
+        yield WorkflowEvent(EventType.THINKING_START, {"title": "开始处理", "stage": "start"})
+        observed = _Observed()
+        stream = getattr(self.graph, "astream", None)
+        if not callable(stream):
+            raise TypeError("API graph must support astream")
+        iterator = stream(dict(state), **self._stream_kwargs(stream)).__aiter__()
+        try:
+            while True:
+                self._check_deadline(state)
+                deadline = state.get("deadline_at")
+                remaining = deadline - time.monotonic() if deadline is not None else None
+                try:
+                    if remaining is None:
+                        update = await iterator.__anext__()
+                    else:
+                        update = await asyncio.wait_for(iterator.__anext__(), timeout=max(0, remaining))
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError as exc:
+                    raise WorkflowTimeoutError("workflow deadline exceeded") from exc
+                for event in self._consume_update(update, observed):
+                    yield event
+            if observed.result is None:
+                self._check_deadline(state)
+                observed.result = dict(await self.graph.ainvoke(dict(state)))
+            self._check_deadline(state)
+        except Exception as exc:
+            yield error_event(exc, self._error_stage(observed.emitted))
+            return
+        finally:
+            close = getattr(iterator, "aclose", None)
+            if callable(close):
+                await close()
+        for event in self._finish(state, observed):
+            yield event
+
+    @staticmethod
+    def _stream_kwargs(stream):
+        kwargs = {"stream_mode": "updates"}
+        try:
+            parameters = inspect.signature(stream).parameters
+            if "subgraphs" in parameters or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+                kwargs["subgraphs"] = True
+            if "version" in parameters:
+                kwargs["version"] = "v2"
+        except (TypeError, ValueError):
+            pass
+        return kwargs
+
+    def _consume_update(self, update, observed: _Observed) -> Iterator[WorkflowEvent]:
+        namespace, data = self._stream_update(update)
+        if not isinstance(data, Mapping):
+            return
+        is_nested = bool(namespace)
+        observed.nested_seen = observed.nested_seen or is_nested
+        for node, value in data.items():
+            node = self._node_name(node)
+            if is_nested:
+                public = self._public_node(node)
+                node_key = (namespace, node)
+                if public and node_key not in observed.emitted_nodes:
+                    observed.emitted_nodes.add(node_key)
+                    observed.emitted.add(public[0])
+                    observed.sequence += 1
+                    yield self._step(public[0], public[1], observed.sequence, node=node)
+            elif not observed.nested_seen:
+                public = self._public_stage(node, value)
+                if public and public[0] not in observed.emitted:
+                    observed.emitted.add(public[0])
+                    observed.sequence += 1
+                    yield self._step(public[0], public[1], observed.sequence)
+            if isinstance(value, Mapping):
+                observed.result = {**(observed.result or {}), **value}
+            elif not is_nested:
+                observed.result = {**(observed.result or {}), node: value}
+        if is_nested and not any(isinstance(value, Mapping) for value in data.values()):
+            observed.result = {**(observed.result or {}), **data}
+
+    def _finish(self, state: Mapping[str, Any], observed: _Observed) -> Iterator[WorkflowEvent]:
+        result = observed.result or {}
+        emitted = observed.emitted
+        sequence = observed.sequence
         # Compatibility graphs may return a new context without carrying the
         # request-bound anchor initialized at the API boundary. Preserve it in
         # the public result without mutating the graph input.

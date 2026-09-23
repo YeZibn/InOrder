@@ -1,10 +1,4 @@
-# python-retry-timeout-policies Specification
-
-## Purpose
-
-为无状态 Python 订单解析服务定义清晰、可控且互不重复的重试与超时边界，避免单次请求无限等待或因多层重试造成重复执行。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Bound Python request execution
 
@@ -25,14 +19,6 @@ Python 服务 SHALL 为一次完整工作流设置总超时预算；该预算从
 #### Scenario: Retry cannot fit within remaining budget
 - **WHEN** 一次可重试的 LLM 错误发生，但工作流预算已耗尽，或有效 `Retry-After` 的等待将耗尽预算
 - **THEN** 系统停止重试并返回工作流超时错误，不继续发起上游请求
-
-### Requirement: Keep Python requests stateless
-
-Python SHALL 将每次请求视为独立执行单元，不根据 `session_id` 或其他标识读取、保存或恢复跨请求状态，也不得自动重放整条工作流。
-
-#### Scenario: Repeat request arrives
-- **WHEN** 客户端再次提交相同或不同标识的请求
-- **THEN** Python 只使用本次请求提供的 `message`、`history` 和 `order_context` 执行，不进行本地幂等判断
 
 ### Requirement: Separate retry layers
 

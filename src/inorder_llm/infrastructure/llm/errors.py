@@ -32,10 +32,22 @@ class UpstreamError(LLMError):
     retryable = True
 
 
+class UpstreamFatalError(LLMError):
+    """An upstream failure without evidence that retrying is safe."""
+
+    retryable = False
+
+
 class WorkflowTimeoutError(LLMError):
     """The current Python workflow exceeded its request deadline."""
 
     retryable = False
+
+
+class WorkflowOverloadedError(LLMError):
+    """The API worker has no capacity within its bounded wait period."""
+
+    retryable = True
 
 
 class NodeExecutionError(LLMError):

@@ -13,6 +13,10 @@ class ResponsesLanguageModel:
             raise RuntimeError("langextract is required") from exc
 
         class _Provider(OpenAILanguageModel):
+            def __init__(self, *args, timeout: float, **kwargs):
+                super().__init__(*args, max_workers=1, **kwargs)
+                self._client = self._client.with_options(timeout=timeout, max_retries=0)
+
             def _build_responses_params(self, prompt: str, config: dict) -> dict:
                 params: dict[str, Any] = {
                     "model": self.model_id,

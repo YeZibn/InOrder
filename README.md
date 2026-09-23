@@ -104,6 +104,10 @@ curl -N -X POST http://localhost:8000/api/v2/chat \
 
 SSE 仅发送安全的工作流阶段和结构化结果，不发送 prompt、原始模型响应或隐藏推理；原有 `inorder` CLI 命令保持不变。
 
+API 以异步图流执行工作流，模型调用使用异步客户端；尚未迁移的同步节点由有界线程池执行。每个 worker 默认同时处理最多 8 条工作流、允许 8 个请求等待最多 5 秒，同时最多进行 8 个 LLM 调用；LangExtract 最多占用 4 个专用线程，并计入共享 LLM 上限。可通过 `.env.example` 中的 `WORKFLOW_MAX_CONCURRENCY`、`WORKFLOW_MAX_WAITING`、`WORKFLOW_QUEUE_TIMEOUT_SECONDS`、`LLM_MAX_CONCURRENCY` 和 `LANGEXTRACT_MAX_THREADS` 调整。多 worker 部署时，这些上限按 worker 分别计算。入场队列满或等待到期返回 HTTP 503 JSON `WORKFLOW_OVERLOADED`；流开始后的依赖容量超限返回 SSE `ERROR`。SDK 重试已关闭，`LLM_MAX_RETRIES` 只控制 InOrder 自己的重试；`WORKFLOW_TIMEOUT_SECONDS` 限制包括排队、请求和退避在内的整条工作流。
+
+可运行 `python scripts/benchmark_async_workflow.py --requests 64 --concurrency 8 32` 重复本地合成负载检查。使用 50 ms 模拟上游延迟、单 worker 默认容量时，本机一次运行在并发 8 下得到 p95 59.59 ms、503 比例 0、事件循环最大额外延迟 3.48 ms、线程峰值 1、上游请求 64；并发 32 的突发下得到 p95 117.94 ms、503 比例 0.75、事件循环最大额外延迟 1.56 ms、线程峰值 1、上游请求 16，实际上游并发峰值均未超过 8。该脚本不调用真实模型，也不能替代部署环境压测；这组结果支持保留 8/8 的初始容量，并表明突发流量会被有限队列明确拒绝。
+
 ## 意图规划子图
 
 意图识别阶段只输出计划，不执行订单业务。主意图只区分 `order` 与 `qa`：含明确订单执行请求即为 `order`，纯信息或操作方法询问为 `qa`；混合消息按「执行优先」归为 `order`。

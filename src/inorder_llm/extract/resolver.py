@@ -4,7 +4,7 @@ from typing import Any, List, Mapping, Sequence
 
 from ..infrastructure.llm import ChatMessage, LLMClient
 from ..infrastructure.llm.text import strip_json_prefix
-from ..infrastructure.llm.structured import call_with_format_repair
+from ..infrastructure.llm.structured import call_with_format_repair, acall_with_format_repair
 from ..intent.resolver import StructuredIntentError
 from ..catalog import render_vehicle_prompt_vocabulary
 from .models import Entity
@@ -340,6 +340,13 @@ class EntityExtractor:
             ChatMessage("user", user_message),
         ]
         entities = call_with_format_repair(self.client, messages, parse_entities_from_text, "上一次输出无法解析。请严格只返回符合要求的 entities JSON 对象，不要添加解释或 Markdown。")
+        _validate_location_attributes(entities, message)
+        return entities
+
+    async def aextract(self, message: str, history_or_reference, reference_time: str = None, deadline_at: float = None) -> List[Entity]:
+        anchor = reference_time or history_or_reference
+        messages = [ChatMessage("system", EXTRACTION_SYSTEM_PROMPT), ChatMessage("user", _build_user_message(message, [], anchor))]
+        entities = await acall_with_format_repair(self.client, messages, parse_entities_from_text, "上一次输出无法解析。请严格只返回符合要求的 entities JSON 对象，不要添加解释或 Markdown。", deadline_at)
         _validate_location_attributes(entities, message)
         return entities
 
