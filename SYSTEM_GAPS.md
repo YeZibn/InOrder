@@ -9,11 +9,10 @@
 - 货物重量、数量、体积和尺寸仍以原始表达为主，单位换算和多轮累加规则需要统一。
 - 增加真实网关、流式调用和 LangExtract 的回归验证。
 
-## P1：工作流架构
+## P1：工作流与问答能力
 
-- 当前 `full` 链路由 Python Runner 顺序调用意图图和订单图，还不是完整的 LangGraph 父图嵌套子图结构。
-- 后续应明确父图、意图子图、问答子图和下单子图之间的状态传递与路由边界。
-- 需要统一代码、README 和 OpenSpec，清理已经取消的 clarification 等过期描述。
+- `full` 链路已由 LangGraph MainGraph 编排：MainGraph 调用 IntentGraph，并在 `order` 意图时进入订单处理子图；`qa` 意图目前只进入占位终态。
+- 真实问答回答尚未实现。后续如增加问答能力，应作为独立处理分支接入 MainGraph，而不是恢复 CLI 中的第二套 full 编排。
 
 ## P2：会话与订单状态
 

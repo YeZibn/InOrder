@@ -4,7 +4,6 @@ from ...graph.base import BaseGraph
 from ...graph.runnable import dual_node
 from ...intent.protocols import IntentModel
 from .nodes import FinalizeNode, MainIntentNode
-from .routing import route_main_intent
 from .state import IntentGraphState
 
 

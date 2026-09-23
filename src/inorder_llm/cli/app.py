@@ -146,10 +146,10 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
         text.append(format_result(intent_result, "intent", mode))
         if result.get("order_result"):
             text.append(format_result(result["order_result"], "order"))
-        elif result.get("order_graph_entered") is False:
-            text.append("订单处理：未进入\nExtract：未执行\n原因：" + str(result.get("extract_skipped_reason") or "未提供原因"))
         elif result.get("qa_placeholder"):
             text.append(result["qa_placeholder"])
+        elif result.get("order_graph_entered") is False:
+            text.append("订单处理：未进入\nExtract：未执行\n原因：" + str(result.get("extract_skipped_reason") or "未提供原因"))
         return "\n".join(text)
     data = _data(result)
     if not isinstance(data, dict): return "未生成意图识别结果。"
@@ -159,17 +159,17 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
 
 
 class IntentCli:
-    def __init__(self, graph=None, intent_graph=None, order_graph=None, full_runner=None, main_graph=None,
+    def __init__(self, graph=None, intent_graph=None, order_graph=None, main_graph=None,
                  input_fn: Callable[[str], str] = input, output_fn: Callable[[str], None] = print):
         self.input, self.output = input_fn, output_fn
         self.session, self.parser = CliSession(), CommandParser()
         if intent_graph is None: intent_graph = graph
         self.intent_runner = IntentChainRunner(intent_graph) if intent_graph is not None else None
         self.order_runner = OrderChainRunner(order_graph) if order_graph is not None else None
-        self.full_runner = full_runner or (FullChainRunner(self.intent_runner, self.order_runner, main_graph=main_graph) if self.intent_runner else None)
+        self.full_runner = FullChainRunner(main_graph) if main_graph is not None else None
 
     def run_with_main_graph(self, main_graph):
-        self.full_runner = FullChainRunner(self.intent_runner, self.order_runner, main_graph=main_graph)
+        self.full_runner = FullChainRunner(main_graph)
         return self.run()
 
     def switch_chain(self, chain):
@@ -225,7 +225,10 @@ class IntentCli:
         self.session.history = working_history
         context = ChainContext(working_history, self.session.order_context, self.session.reference_time)
         runner = {"full": self.full_runner, "intent": self.intent_runner, "order": self.order_runner}[self.session.chain]
-        if runner is None: return "当前链路未配置，无法识别。"
+        if runner is None:
+            if self.session.chain == "full":
+                return "当前 full 链路配置不可用：未配置 MainGraph。"
+            return "当前 " + self.session.chain + " 链路未配置，无法处理。"
         result = runner.run(recovery.message, context)
         if self.session.chain == "order":
             updated_context = result.get("order_context")

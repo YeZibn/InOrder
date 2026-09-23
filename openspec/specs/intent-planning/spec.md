@@ -8,7 +8,7 @@
 
 ### Requirement: Main intent classification
 
-系统 SHALL 将用户请求分类为 `order` 或 `qa` 两种主意图，不再输出 `ambiguous`。判据为用户期望的输出类型而非命令动词：当用户期望的输出是行动/结果（即想让一次运输/订单发生）时归 `order`，当用户期望的输出是信息时归 `qa`。`order` 覆盖当前订单创建和修改，不包含历史订单查询能力。当消息同时携带咨询信号（了解/咨询/怎么/多少钱/能不能/一般 等）时，即使提及业务目标也归 `qa`。
+系统 SHALL 将用户请求分类为 `order` 或 `qa` 两种主意图，不再输出 `ambiguous` 或任何子意图。分类判据是用户期望的输出类型而非单个关键词：当用户期望系统实际执行运输或当前订单操作时归 `order`；当用户期望获取物流、产品、规则、流程或一般知识时归 `qa`。`order` 覆盖当前订单创建和修改，不包含历史订单查询能力。同一消息同时包含明确执行请求和咨询内容时，执行请求优先归 `order`；仅询问能力、价格或操作方法时归 `qa`。
 
 #### Scenario: Execution request is order
 - **WHEN** 用户使用显式命令要求系统创建或修改当前订单相关信息
@@ -23,7 +23,7 @@
 - **THEN** 系统输出主意图 `order`
 
 #### Scenario: Business goal with consultation signal is qa
-- **WHEN** 用户消息提及业务目标但同时携带咨询信号
+- **WHEN** 用户消息提及业务目标并携带咨询信号，但未明确要求系统执行当前订单操作
 - **THEN** 系统输出主意图 `qa`
 
 #### Scenario: Execution takes priority in mixed request
@@ -35,12 +35,16 @@
 - **THEN** 系统输出主意图 `qa`
 
 #### Scenario: Capability inquiry is qa despite implied intent
-- **WHEN** 用户询问某业务能力或条件是否满足
+- **WHEN** 用户询问“上海到温州能运吗”且未要求代为下单
 - **THEN** 系统输出主意图 `qa`
+
+#### Scenario: Polite execution request remains order
+- **WHEN** 用户说“可以帮我运一吨苹果吗”
+- **THEN** 系统输出 `main_intent=order`，不得仅因“可以吗”判为咨询
 
 ### Requirement: Main intent structured prompt output
 
-主意图识别 prompt SHALL 要求模型只返回包含 `main_intent` 和 `confidence` 的 JSON 对象，其中 `main_intent` 只能为 `order` 或 `qa`，且不得返回子意图字段。
+主意图识别 prompt SHALL 要求模型只返回包含 `main_intent` 和 `confidence` 的 JSON 对象，其中 `main_intent` 只能为 `order` 或 `qa`，`confidence` 必须为 0 到 1 之间的数值；不得返回 `sub_intents`、`depends_on` 或澄清字段。
 
 #### Scenario: Strict JSON classification output
 - **WHEN** 主意图识别器处理用户消息
@@ -48,7 +52,7 @@
 
 ### Requirement: Clarification boundary
 
-系统 SHALL 不在主意图识别阶段判断订单字段完整性或生成澄清；订单处理图或订单摘要模块负责必要字段检查和用户提示，主意图分类不得通过 `ambiguous` 状态触发澄清。
+系统 SHALL 不在主意图识别阶段判断订单字段完整性或生成澄清；完成 `order`/`qa` 路由后，由订单处理图或订单摘要模块负责必要字段检查和用户提示，主意图分类不得通过 `ambiguous` 状态触发澄清。
 
 #### Scenario: Main classification does not clarify
 - **WHEN** 主意图识别器处理任何用户消息
@@ -64,7 +68,7 @@
 
 ### Requirement: Recognition-only boundary
 
-意图识别子图 SHALL 只负责分类、提取、规范化、关系分析和计划校验，不得查询历史订单数据、修改草稿、创建订单或调用业务工具。
+意图识别子图 SHALL 只负责主意图分类和结果契约校验，不得查询历史订单数据、修改草稿、创建订单、调用业务工具或执行订单字段合并。
 
 #### Scenario: Recognition does not execute order operation
 - **WHEN** 系统识别出 `main_intent=order`

@@ -108,9 +108,9 @@ API 以异步图流执行工作流，模型调用使用异步客户端；尚未�
 
 可运行 `python scripts/benchmark_async_workflow.py --requests 64 --concurrency 8 32` 重复本地合成负载检查。使用 50 ms 模拟上游延迟、单 worker 默认容量时，本机一次运行在并发 8 下得到 p95 59.59 ms、503 比例 0、事件循环最大额外延迟 3.48 ms、线程峰值 1、上游请求 64；并发 32 的突发下得到 p95 117.94 ms、503 比例 0.75、事件循环最大额外延迟 1.56 ms、线程峰值 1、上游请求 16，实际上游并发峰值均未超过 8。该脚本不调用真实模型，也不能替代部署环境压测；这组结果支持保留 8/8 的初始容量，并表明突发流量会被有限队列明确拒绝。
 
-## 意图规划子图
+## 主意图分类图
 
-意图识别阶段只输出计划，不执行订单业务。主意图只区分 `order` 与 `qa`：含明确订单执行请求即为 `order`，纯信息或操作方法询问为 `qa`；混合消息按「执行优先」归为 `order`。
+意图图只负责主意图分类，不执行订单业务。主意图只区分 `order` 与 `qa`：含明确订单执行请求即为 `order`，纯信息或操作方法询问为 `qa`；混合消息按「执行优先」归为 `order`。
 
 ```python
 from inorder_llm.graph.intent import build_intent_graph
@@ -118,10 +118,11 @@ from inorder_llm.graph.intent import build_intent_graph
 graph = build_intent_graph(your_intent_model)
 result = graph.invoke({"message": "参考最近历史订单，修改当前草稿"})
 plan = result["intent_plan"]
-# plan.sub_intents: create_order / modify_draft
+# plan.main_intent: order
+# plan.confidence: 0.0 到 1.0 之间的置信度
 ```
 
-`IntentPlan` 支持主意图、多个订单子意图、步骤参数和 `depends_on`；后续主图可以根据该计划路由到业务子图。
+`IntentPlan` 保存 `main_intent`、可选 `confidence` 和原始消息，不包含订单子意图、步骤参数或 `depends_on`。是否进入订单处理由 MainGraph 根据主意图决定。
 
 图相关代码按职责位于 `inorder_llm/graph/`：
 
@@ -132,16 +133,19 @@ graph/
 │   ├── state.py
 │   ├── routing.py
 │   └── graph.py
-└── intent/
-    ├── state.py
-    ├── routing.py
+├── intent/
+│   ├── graph.py
+│   ├── state.py
+│   └── nodes/
+└── order/
     ├── graph.py
-    └── nodes/
+    ├── state.py
+    └── nodes.py
 ```
 
 `main` 是父图，`intent` 和 `order` 是可独立运行或被父图挂载的子图。
 
-`BaseNode` 只统一节点调用边界，`BaseGraph` 只统一 build/compile；底层仍直接使用官方 LangGraph `StateGraph`。图中 `main_intent` 和 `sub_intent` 是两个独立节点；只有主意图为 `order` 时才会进入子意图节点。当 `order` 未识别出具体子意图时，计划会标记 `needs_clarification`。
+`BaseNode` 只统一节点调用边界，`BaseGraph` 只统一 build/compile；底层仍直接使用官方 LangGraph `StateGraph`。IntentGraph 依次执行 `main_intent` 和 `finalize`；MainGraph 根据 `main_intent` 将 `order` 请求交给订单处理子图，`qa` 请求进入占位终态。当前尚未实现真实问答回答。
 
 ## 交互式 CLI
 

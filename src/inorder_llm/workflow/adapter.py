@@ -29,9 +29,6 @@ _STAGE_TEXT = {
 # browser.
 _NODE_TEXT = {
     "main_intent": ("intent", "主意图识别完成"),
-    "sub_intent": ("intent", "子意图解析完成"),
-    "build_plan": ("intent", "意图处理计划完成"),
-    "validate_plan": ("intent", "意图信息校验完成"),
     "finalize": ("order", "订单处理结果整理完成"),
     "rewrite": ("order", "订单语义整理完成"),
     "extract": ("order", "订单字段提取完成"),

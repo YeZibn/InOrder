@@ -40,6 +40,7 @@ def test_mode_switch_help_clear_and_exit():
 def test_messages_route_to_graph_and_plan_formats():
     graph = FakeGraph()
     cli = IntentCli(graph=graph)
+    cli.switch_chain("intent")
     output = cli.handle_message("我要下单")
     assert "order" in output
     assert graph.calls == [{"message": "我要下单"}]
@@ -89,10 +90,35 @@ class FakeOrderGraph:
         }
 
 
+class FakeMainGraph:
+    def __init__(self, main_intent="order", order_result=None):
+        self.main_intent = main_intent
+        self.order_result = order_result or {
+            "rewrite_result": RewriteResult("本轮选择最合理车型", "设置当前车型"),
+            "entities": [],
+        }
+        self.calls = []
+
+    def invoke(self, state):
+        self.calls.append(state)
+        if self.main_intent == "qa":
+            return {
+                "intent_result": {"main_intent": "qa", "confidence": 0.9},
+                "qa_placeholder": "问答入口尚未实现（当前仅支持识别与订单语义解析）。",
+                "order_graph_entered": False,
+                "extract_executed": False,
+            }
+        return {
+            "intent_result": {"main_intent": "order", "confidence": 0.9},
+            "order_result": self.order_result,
+        }
+
+
 def test_chain_switches_and_routes_intent_order_and_full():
     intent = FakeIntentGraph("order")
     order = FakeOrderGraph()
-    cli = IntentCli(intent_graph=intent, order_graph=order)
+    main = FakeMainGraph()
+    cli = IntentCli(intent_graph=intent, order_graph=order, main_graph=main)
     assert cli.session.chain == "full"
     assert cli.handle_command("chain", ["intent"]) == "当前链路：intent"
     cli.handle_message("识别一下")
@@ -107,9 +133,24 @@ def test_chain_switches_and_routes_intent_order_and_full():
     assert order.calls[0]["reference_time"]
 
     assert cli.handle_command("chain", ["full"]) == "当前链路：full"
-    cli.handle_message("完整执行")
-    assert len(intent.calls) == 2
-    assert len(order.calls) == 2
+    output = cli.handle_message("完整执行")
+    assert "订单处理：已进入" in output
+    assert len(intent.calls) == 1
+    assert len(order.calls) == 1
+    assert len(main.calls) == 1
+
+
+def test_full_chain_without_main_graph_reports_configuration_unavailable():
+    intent = FakeIntentGraph("order")
+    order = FakeOrderGraph()
+    cli = IntentCli(intent_graph=intent, order_graph=order)
+
+    output = cli.handle_message("完整执行")
+
+    assert "配置不可用" in output
+    assert "MainGraph" in output
+    assert intent.calls == []
+    assert order.calls == []
 
 
 def test_cli_reuses_reference_time_from_context(monkeypatch):
@@ -118,6 +159,7 @@ def test_cli_reuses_reference_time_from_context(monkeypatch):
     intent = FakeIntentGraph("order")
     order = FakeOrderGraph()
     cli = IntentCli(intent_graph=intent, order_graph=order)
+    cli.switch_chain("order")
     cli.handle_message("第一条")
     cli.handle_message("第二条")
     assert [call["reference_time"] for call in order.calls] == ["2026-08-26 10:00", "2026-08-26 10:00"]
@@ -126,26 +168,29 @@ def test_cli_reuses_reference_time_from_context(monkeypatch):
 def test_cli_context_time_wins_over_newly_generated_time(monkeypatch):
     monkeypatch.setattr("inorder_llm.cli.app.resolve_context_reference_time", lambda context, request=None: context or "2026-08-26 10:00")
     cli = IntentCli(intent_graph=FakeIntentGraph("order"), order_graph=FakeOrderGraph())
+    cli.switch_chain("order")
     cli.session.order_context.reference_time = "2020-01-02 03:04"
     cli.handle_message("后续消息")
     assert cli.session.reference_time == "2020-01-02 03:04"
 
 
-def test_full_qa_skips_order_graph_and_legacy_intent_is_alias():
+def test_full_qa_displays_placeholder_and_skips_order_graph():
     intent = FakeIntentGraph("qa")
     order = FakeOrderGraph()
-    cli = IntentCli(intent_graph=intent, order_graph=order)
+    main = FakeMainGraph("qa")
+    cli = IntentCli(intent_graph=intent, order_graph=order, main_graph=main)
     assert cli.handle_command("intent") == "当前链路：intent"
     assert cli.handle_command("chain", ["full"]) == "当前链路：full"
     output = cli.handle_message("上海能运吗")
     assert "问答入口尚未实现" in output
+    assert "订单处理：未进入" not in output
+    assert intent.calls == []
     assert order.calls == []
+    assert len(main.calls) == 1
 
 
 def test_full_output_reports_extract_execution_and_entity_count():
-    intent = FakeIntentGraph("order")
-    order = FakeOrderGraph()
-    cli = IntentCli(intent_graph=intent, order_graph=order)
+    cli = IntentCli(main_graph=FakeMainGraph())
     output = cli.handle_message("再加一吨苹果")
     assert "订单处理：已进入" in output
     assert "Rewrite：已完成" in output
@@ -154,9 +199,11 @@ def test_full_output_reports_extract_execution_and_entity_count():
 
 
 def test_full_output_does_not_report_rewrite_clarification():
-    intent = FakeIntentGraph("order")
-    order = FakeOrderGraph(clarification=True)
-    cli = IntentCli(intent_graph=intent, order_graph=order)
+    cli = IntentCli(main_graph=FakeMainGraph(order_result={
+        "rewrite_result": RewriteResult("本轮选择最合理车型", "设置当前车型"),
+        "entities": [],
+        "needs_clarification": True,
+    }))
     output = cli.handle_message("换回之前那个车")
     assert "订单处理：已进入" in output
     assert "Rewrite：已完成" in output
@@ -229,6 +276,7 @@ def test_cli_shows_vehicle_fit_level_and_boundary_reason_with_summary():
 
 def test_successful_message_appends_concise_assistant_summary_only():
     cli = IntentCli(graph=FakeGraph())
+    cli.switch_chain("intent")
     cli.handle_message("我要下单")
     turns = cli.session.history.turns
     assert [turn.role for turn in turns] == ["user", "assistant"]
@@ -238,7 +286,7 @@ def test_successful_message_appends_concise_assistant_summary_only():
     assert "Entity" not in assistant.content
     assert "OrderContext" not in assistant.content
     assert "raw" not in assistant.content
-    assert assistant.metadata["chain"] == "full"
+    assert assistant.metadata["chain"] == "intent"
 
 
 def test_failed_graph_does_not_append_assistant_summary():
@@ -247,6 +295,7 @@ def test_failed_graph_does_not_append_assistant_summary():
             raise RuntimeError("gateway failed")
 
     cli = IntentCli(graph=FailingGraph())
+    cli.switch_chain("intent")
     with pytest.raises(RuntimeError, match="gateway failed"):
         cli.handle_message("我要下单")
     assert [turn.role for turn in cli.session.history.turns] == ["user"]
@@ -261,6 +310,7 @@ def test_cli_retry_replays_pending_user_without_duplicate_turn():
             return {"main_intent": "qa", "confidence": 0.9}
     graph = RecoveringGraph()
     cli = IntentCli(graph=graph)
+    cli.switch_chain("intent")
     with pytest.raises(RuntimeError): cli.handle_message("我要运苹果")
     cli.handle_message("重试")
     assert graph.calls[1]["message"] == "我要运苹果"
