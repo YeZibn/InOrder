@@ -1,6 +1,7 @@
 """Nodes for the standalone order-processing subgraph."""
 
 import inspect
+from dataclasses import replace
 from typing import Any, Dict, Literal
 
 from ...graph.base import BaseNode
@@ -167,13 +168,36 @@ class VehicleResolutionNode(BaseNode[OrderGraphState]):
             result = self.model.resolve(context.cargo_profiles, context.cargo_profile_summary, raw_text)
         if matched_specs:
             merged_specs = list(dict.fromkeys([*result.vehicle_specs, *matched_specs]))
-            result = VehicleResolutionResult(result.vehicle_type, merged_specs, result.source, result.reason, result.raw_vehicle_text)
-        updated = context
+            result = replace(result, vehicle_specs=merged_specs)
         from copy import deepcopy
         updated = deepcopy(context)
-        updated.vehicle_type = result.vehicle_type
-        updated.vehicle_specs = list(result.vehicle_specs)
-        updated.vehicle_source = result.source
+        lower_bound_primary = next(
+            (
+                candidate
+                for candidate in result.candidates
+                if candidate.get("fit_level") == "lower_bound_fit"
+            ),
+            None,
+        ) if result.source == "estimated" else None
+        if lower_bound_primary is not None:
+            primary_type = lower_bound_primary.get("vehicle_type")
+            if isinstance(primary_type, str) and primary_type:
+                primary_specs = list(lower_bound_primary.get("vehicle_specs", result.vehicle_specs))
+                if matched_specs:
+                    primary_specs = list(dict.fromkeys([*primary_specs, *matched_specs]))
+                result = replace(
+                    result,
+                    vehicle_type=primary_type,
+                    vehicle_specs=primary_specs,
+                )
+                updated.vehicle_type = result.vehicle_type
+                updated.vehicle_specs = list(result.vehicle_specs)
+                updated.vehicle_source = "estimated"
+        else:
+            if result.source == "estimated" and result.vehicle_type:
+                result = replace(result, vehicle_type="")
+            if matched_specs:
+                updated.vehicle_specs = list(dict.fromkeys([*updated.vehicle_specs, *matched_specs]))
         return {"vehicle_resolution": result, "order_context": updated, "order_context_updated": updated != context}
 
 

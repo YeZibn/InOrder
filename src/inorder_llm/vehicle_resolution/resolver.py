@@ -29,19 +29,23 @@ def _number(value: Any) -> float | None:
     return float(value) if isinstance(value, (int, float)) and value >= 0 else None
 
 
-def _boxes(profiles: Sequence[Mapping[str, Any]]) -> list[_Box]:
+def _boxes(profiles: Sequence[Mapping[str, Any]]) -> tuple[list[_Box], bool]:
     result = []
+    dimensions_complete = True
     for index, profile in enumerate(profiles):
-        dims = profile.get("dimensions_cm") or {}
+        dims = profile.get("dimensions_cm")
+        if not isinstance(dims, Mapping):
+            dims = {}
         values = tuple(_number(dims.get(key)) for key in ("length", "width", "height"))
         if any(value is None or value <= 0 for value in values):
+            dimensions_complete = False
             continue
         volume = _number(profile.get("volume_m3"))
         weight = _number(profile.get("weight_kg"))
         if volume is None:
             volume = prod(values) / 1_000_000
         result.append(_Box(str(profile.get("name") or f"cargo_{index + 1}"), values, volume, weight or 0.0))
-    return sorted(result, key=lambda item: (-item.volume_m3, -max(item.size_cm)))
+    return sorted(result, key=lambda item: (-item.volume_m3, -max(item.size_cm))), dimensions_complete
 
 
 def _overlap(a: _Placed, b: _Placed) -> bool:
@@ -81,8 +85,10 @@ def _fit(boxes: Sequence[_Box], capacity_cm: tuple[float, float, float]) -> tupl
     return True, used_volume
 
 
-def _max_range(value: tuple[float, float] | None) -> float:
-    return float(value[1]) if value else 0.0
+def _range_endpoint(value: tuple[float, float] | None, endpoint: int) -> float | None:
+    if value is None or len(value) != 2:
+        return None
+    return float(value[endpoint])
 
 
 def _required_specs(profiles: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -90,10 +96,23 @@ def _required_specs(profiles: Sequence[Mapping[str, Any]]) -> list[str]:
     return ["cold_chain"] if temperatures.intersection({"refrigerated", "frozen"}) else []
 
 
-def _candidate(vehicle: VehicleType, specs: list[str], boxes: Sequence[_Box], total_weight: float, total_volume: float) -> Mapping[str, Any] | None:
-    payload = _max_range(vehicle.payload_t) * 1000
-    volume = _max_range(vehicle.volume_m3)
-    capacity = (_max_range(vehicle.length_m) * 100, _max_range(vehicle.width_m) * 100, _max_range(vehicle.height_m) * 100)
+def _candidate(
+    vehicle: VehicleType,
+    specs: list[str],
+    boxes: Sequence[_Box],
+    total_weight: float,
+    total_volume: float,
+    endpoint: int,
+) -> Mapping[str, Any] | None:
+    payload_t = _range_endpoint(vehicle.payload_t, endpoint)
+    volume = _range_endpoint(vehicle.volume_m3, endpoint)
+    length = _range_endpoint(vehicle.length_m, endpoint)
+    width = _range_endpoint(vehicle.width_m, endpoint)
+    height = _range_endpoint(vehicle.height_m, endpoint)
+    if any(value is None for value in (payload_t, volume, length, width, height)):
+        return None
+    payload = payload_t * 1000
+    capacity = (length * 100, width * 100, height * 100)
     if total_weight > payload + 1e-6 or total_volume > volume + 1e-6:
         return None
     fitted, used = _fit(boxes, capacity)
@@ -102,11 +121,10 @@ def _candidate(vehicle: VehicleType, specs: list[str], boxes: Sequence[_Box], to
     return {
         "vehicle_type": vehicle.code,
         "vehicle_specs": list(specs),
-        "fit": True,
         "volume_slack_m3": round(max(volume - total_volume, 0.0), 3),
         "payload_slack_kg": round(max(payload - total_weight, 0.0), 1),
         "used_volume_m3": round(used, 3),
-        "reason": "通过总重量、总体积和多货物整体箱极点计算。",
+        "reason": "通过车型能力范围下界、总重量、总体积和多货物整体箱极点计算。" if endpoint == 0 else "通过车型能力范围上界、总重量、总体积和多货物整体箱极点计算。",
     }
 
 
@@ -122,21 +140,47 @@ class VehicleResolutionResolver:
         catalog = self.catalog_provider.get_catalog(normalize_city(effective_city))
         total_weight = _number(summary.get("total_weight_kg")) or sum(_number(item.get("weight_kg")) or 0.0 for item in cargo_profiles)
         total_volume = _number(summary.get("total_volume_m3")) or sum(_number(item.get("volume_m3")) or 0.0 for item in cargo_profiles)
-        boxes = _boxes(cargo_profiles)
+        boxes, dimensions_complete = _boxes(cargo_profiles)
         specs = _required_specs(cargo_profiles)
         candidates = []
         for vehicle in catalog.vehicle_types:
-            item = _candidate(vehicle, specs, boxes, total_weight, total_volume)
+            if not cargo_profiles or not dimensions_complete:
+                break
+            lower_candidate = _candidate(vehicle, specs, boxes, total_weight, total_volume, 0)
+            upper_candidate = _candidate(vehicle, specs, boxes, total_weight, total_volume, 1)
+            if lower_candidate is not None:
+                item = {
+                    **lower_candidate,
+                    "fit_level": "lower_bound_fit",
+                    "reason": "按车型能力范围下界通过总重量、总体积和多货物整体箱极点计算。",
+                }
+            elif upper_candidate is not None:
+                item = {
+                    **upper_candidate,
+                    "fit_level": "upper_bound_only",
+                    "reason": "仅按车型能力范围上界通过总重量、总体积和多货物整体箱极点计算，可能适配。",
+                }
+            else:
+                item = None
             if item is not None:
                 candidates.append(item)
-        candidates.sort(key=lambda item: (item["volume_slack_m3"], item["payload_slack_kg"], item["vehicle_type"]))
+        candidates.sort(key=lambda item: (
+            0 if item["fit_level"] == "lower_bound_fit" else 1,
+            item["volume_slack_m3"],
+            item["payload_slack_kg"],
+            item["vehicle_type"],
+        ))
         candidates = candidates[:3]
-        reason = "根据车型表上限、货物总重量/总体积和多货物整体箱极点计算。"
+        reason = "根据车型能力范围上下界分别对货物总重量、总体积和多货物整体箱极点计算。"
         if raw_vehicle_text:
             reason = f"车型表达“{raw_vehicle_text}”无法唯一匹配，{reason}"
+        if not cargo_profiles:
+            reason += "缺少货物画像，无法检查装载条件。"
+        elif not dimensions_complete:
+            reason += "至少一条货物画像缺少有效长宽高，无法确认装载适配。"
         if not candidates:
             reason += "没有车型通过计算。"
-        primary = candidates[0] if candidates else {}
+        primary = next((item for item in candidates if item["fit_level"] == "lower_bound_fit"), {})
         return VehicleResolutionResult(
             primary.get("vehicle_type", ""), list(primary.get("vehicle_specs", specs)), "estimated", reason,
             raw_vehicle_text, candidates, catalog.city, catalog.source, catalog.version, catalog.catalog_stale,

@@ -120,12 +120,34 @@ def test_matched_user_vehicle_short_circuits_estimation():
 def test_unmatched_vehicle_falls_back_to_estimation():
     rewrite = FakeRewriteModel(RewriteResult("设置大车", "设置大车"))
     extractor = FakeExtractor([Entity("vehicle_type", "set", {}, "大车")])
-    estimator = FakeVehicleResolution(VehicleResolutionResult("truck_6m8", [], "estimated", "大车无法唯一匹配，依据货物画像估算。"))
-    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(_state())
-    assert result["vehicle_resolution"].vehicle_type == "truck_6m8"
+    estimator = FakeVehicleResolution(VehicleResolutionResult(
+        "", [], "estimated", "大车无法唯一匹配，只有上界候选。",
+        candidates=[{"vehicle_type": "truck_6m8", "vehicle_specs": [], "fit_level": "upper_bound_only"}],
+    ))
+    existing = OrderContext(vehicle_type="truck_5m2", vehicle_specs=["cold_chain"], vehicle_source="user_matched")
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(_state(context=existing))
+    assert result["vehicle_resolution"].vehicle_type == ""
     assert result["vehicle_resolution"].source == "estimated"
+    assert result["vehicle_resolution"].candidates[0]["fit_level"] == "upper_bound_only"
     assert estimator.calls[0][2] == "大车"
+    assert result["order_context"].vehicle_type == "truck_5m2"
+    assert result["order_context"].vehicle_specs == ["cold_chain"]
+    assert result["order_context"].vehicle_source == "user_matched"
+
+
+def test_estimated_lower_bound_candidate_is_committed_as_primary_vehicle():
+    rewrite = FakeRewriteModel(RewriteResult("识别订单", "识别订单"))
+    extractor = FakeExtractor()
+    estimator = FakeVehicleResolution(VehicleResolutionResult(
+        "truck_6m8", [], "estimated", "下界候选通过。",
+        candidates=[{"vehicle_type": "truck_6m8", "vehicle_specs": ["cold_chain"], "fit_level": "lower_bound_fit"}],
+    ))
+
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(_state())
+
+    assert result["vehicle_resolution"].vehicle_type == "truck_6m8"
     assert result["order_context"].vehicle_type == "truck_6m8"
+    assert result["order_context"].vehicle_specs == ["cold_chain"]
     assert result["order_context"].vehicle_source == "estimated"
 
 

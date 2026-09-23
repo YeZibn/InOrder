@@ -1,20 +1,4 @@
-## Purpose
-
-为订单提供遵循用户明确车型选择的最终车型解析，并在缺少可用用户车型时利用货物画像估算车型，形成可解释且不擅自替换用户选择的决策结果。
-
-## Requirements
-
-### Requirement: Prefer a matched user vehicle
-
-系统 SHALL 先使用用户本轮或当前上下文中的车型表达匹配集中车型主数据；匹配成功时 SHALL 直接采用 canonical `vehicle_type` 和 `vehicle_specs`，并将结果来源标记为 `user_matched`。匹配成功的用户车型不得被货物画像估算结果替换。
-
-#### Scenario: Resolve an exact user vehicle
-- **WHEN** 用户输入“用4米2厢式车”且车型表达可匹配主数据
-- **THEN** 系统采用 `vehicle_type=truck_4m2`、`vehicle_specs=["enclosed"]`，来源为 `user_matched`
-
-#### Scenario: Keep a matched vehicle despite cargo estimates
-- **WHEN** 用户明确指定的车型已经匹配成功，且货物画像显示其他车型可能更合适
-- **THEN** 系统仍保留用户匹配车型，不执行能力校验结论，也不自动替换车型
+## MODIFIED Requirements
 
 ### Requirement: Estimate when no usable user vehicle exists
 
@@ -34,11 +18,11 @@
 
 #### Scenario: Fall back from an ambiguous expression
 - **WHEN** 用户输入“大车”“小车”“之前那辆车”或其他无法唯一匹配的车型表达
-- **THEN** 系统不强制映射该表达，使用确定性计算估算最多三个车型，并保留原始表达作为决策原因
+- **THEN** 系统不强制映射该表达，按上述等级估算候选，并保留原始表达作为决策原因
 
 #### Scenario: Estimate with pickup city catalog
 - **WHEN** 用户未提供车型且订单起点城市为温州
-- **THEN** 系统使用温州目录进行重量、体积和极点装载计算
+- **THEN** 系统使用温州目录进行车型能力和装载评估
 
 #### Scenario: Fall back to user location
 - **WHEN** 订单起点城市缺失但用户定位城市为上海
@@ -50,7 +34,7 @@
 
 ### Requirement: Preserve unresolved vehicle input
 
-无法匹配的车型原文 SHALL 保留在决策结果或诊断信息中，但不得写入 `OrderContext.vehicle_type` 或 `vehicle_specs` 作为 canonical 值；已有 canonical 车型上下文不得因本次未匹配输入被覆盖。
+无法匹配的车型原文 SHALL 保留在决策结果或诊断信息中，但不得写入 `OrderContext.vehicle_type` 或 `vehicle_specs` 作为 canonical 值；已有 canonical 车型上下文不得因本次未匹配输入被覆盖。若当前估算没有 `lower_bound_fit` 主候选，系统 SHALL 保留已有 canonical 车型上下文，并将 `upper_bound_only` 候选作为建议单独返回。
 
 #### Scenario: Do not overwrite context with an unresolved vehicle
 - **WHEN** 当前上下文已有 `truck_5m2`，本轮输入“换成大车”且“大车”无法唯一匹配，估算只有 `upper_bound_only` 候选
@@ -65,7 +49,7 @@
 - **THEN** 结果包含 canonical 车型及 `source="user_matched"`
 
 #### Scenario: Report estimation source and candidate levels
-- **WHEN** 车型由货物画像推断得到
+- **WHEN** 车型由货物画像和车型范围推断得到
 - **THEN** 结果包含 `source="estimated"`、各候选的 `fit_level` 及相应估算依据
 
 #### Scenario: Report catalog provenance

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from inorder_llm.cli.app import CHAINS, CliSession, CommandParser, IntentCli, MODES
+from inorder_llm.cli.app import CHAINS, CliSession, CommandParser, IntentCli, MODES, format_result
 from inorder_llm.context.models import HistoryConversation, OrderContext
 from inorder_llm.rewrite.models import RewriteResult
 
@@ -207,6 +207,24 @@ def test_cli_prefers_business_summary_and_missing_field_prompt():
     assert "目前已为您识别出" in output
     assert "incomplete" not in output
     assert "Rewrite" not in output
+
+
+def test_cli_shows_vehicle_fit_level_and_boundary_reason_with_summary():
+    output = format_result({
+        "order_summary": {"user_message": "已为您整理好运输需求。"},
+        "vehicle_resolution": {
+            "candidates": [{
+                "vehicle_type": "truck_6m8",
+                "fit_level": "upper_bound_only",
+                "reason": "仅按车型能力范围上界通过，可能适配。",
+                "volume_slack_m3": 2.0,
+            }],
+        },
+    }, chain="order")
+
+    assert "仅按范围上界通过，可能适配" in output
+    assert "仅按车型能力范围上界通过" in output
+    assert "体积余量 2.0m³" in output
 
 
 def test_successful_message_appends_concise_assistant_summary_only():

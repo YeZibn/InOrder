@@ -44,6 +44,27 @@ _data = to_data
 _intent_data = intent_view
 
 
+def _vehicle_candidate_lines(result) -> List[str]:
+    resolution = _data(result.get("vehicle_resolution"))
+    if not isinstance(resolution, dict):
+        return []
+    lines = []
+    labels = {
+        "lower_bound_fit": "按范围下界通过",
+        "upper_bound_only": "仅按范围上界通过，可能适配",
+    }
+    for index, candidate in enumerate(resolution.get("candidates", []), 1):
+        level = labels.get(candidate.get("fit_level"), "适配等级未知")
+        reason = candidate.get("reason") or ""
+        slack = candidate.get("volume_slack_m3")
+        detail = f"；体积余量 {slack}m³" if slack is not None else ""
+        lines.append(
+            f"候选车型{index}（{level}）：{candidate.get('vehicle_type')}"
+            f"；{reason}{detail}"
+        )
+    return lines
+
+
 def _assistant_summary(result, chain: str, mode: Optional[str] = None):
     """Build a compact history turn and metadata from structured results."""
     if isinstance(result, str):
@@ -93,7 +114,9 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
     if chain == "order":
         order_summary = _data(result.get("order_summary"))
         if isinstance(order_summary, dict):
-            return str(order_summary.get("user_message") or order_summary.get("summary", "订单已解析"))
+            text = str(order_summary.get("user_message") or order_summary.get("summary", "订单已解析"))
+            candidate_lines = _vehicle_candidate_lines(result)
+            return "\n".join([text, *candidate_lines]) if candidate_lines else text
         rewrite = _data(result.get("rewrite_result"))
         lines = ["链路：order（仅解析，未执行业务）"]
         lines.append("订单处理：" + ("已进入" if result.get("order_graph_entered") else "未进入"))
@@ -112,8 +135,7 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
             lines.append("车型来源：" + str(resolution.get("source", "")))
             if resolution.get("reason"):
                 lines.append("车型原因：" + str(resolution["reason"]))
-            for index, candidate in enumerate(resolution.get("candidates", []), 1):
-                lines.append(f"候选车型{index}：{candidate.get('vehicle_type')}（余量 {candidate.get('volume_slack_m3')}m³）")
+            lines.extend(_vehicle_candidate_lines(result))
         for entity in result.get("entities", []):
             item = _data(entity)
             lines.append("Entity：" + json.dumps(item, ensure_ascii=False))

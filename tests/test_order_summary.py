@@ -1,5 +1,6 @@
 from inorder_llm.context import OrderContext
 from inorder_llm.order_summary import build_order_summary
+from inorder_llm.vehicle_resolution import VehicleResolutionResult
 
 
 def _time():
@@ -57,3 +58,19 @@ def test_time_without_context_satisfies_delivery_time():
 def test_vehicle_is_not_required_when_absent():
     result = build_order_summary(_complete_context())
     assert not any(item.field.startswith("vehicle") for item in result.missing_required)
+
+
+def test_vehicle_candidate_levels_and_boundary_reasons_are_in_summary_facts():
+    resolution = VehicleResolutionResult(
+        "", [], "estimated", "未找到下界主车型。",
+        candidates=[
+            {"vehicle_type": "truck_4m2", "fit_level": "upper_bound_only",
+             "reason": "仅按能力范围上界通过，可能适配。"},
+        ],
+    )
+
+    result = build_order_summary(_complete_context(), resolution)
+
+    vehicle = result.facts["vehicle"]
+    assert vehicle["candidates"][0]["fit_level"] == "upper_bound_only"
+    assert vehicle["candidates"][0]["reason"] == "仅按能力范围上界通过，可能适配。"
