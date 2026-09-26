@@ -1,0 +1,198 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1420" viewBox="0 0 1920 1420" role="img" aria-labelledby="title desc">
+  <title id="title">OrderProcessingGraph：从用户输入到订单草稿</title>
+  <desc id="desc">展示 API 和 MainGraph 的入口路由、OrderProcessingGraph 的条件节点、车型解析内部快捷返回与自动估算分支，以及订单结果回到父图后由 SSE 返回。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M1,1 L11,6 L1,11 Z" fill="#41658F"/></marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M1,1 L11,6 L1,11 Z" fill="#238264"/></marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; fill: #17243e; }
+      .title { font-size: 40px; font-weight: 750; letter-spacing: .3px; }
+      .subtitle { font-size: 19px; fill: #5b6c86; }
+      .panel { fill: #ffffff; stroke: #d8e2ef; stroke-width: 2; }
+      .panel-head { font-size: 23px; font-weight: 720; fill: #173a6c; }
+      .panel-note { font-size: 15px; fill: #718096; }
+      .node { fill: #edf4ff; stroke: #4b83d1; stroke-width: 2.2; rx: 13; }
+      .decision { fill: #fff5e4; stroke: #e29a32; stroke-width: 2.5; }
+      .result { fill: #eaf7f1; stroke: #49a181; stroke-width: 2.2; rx: 13; }
+      .node-title { font-size: 20px; font-weight: 700; text-anchor: middle; }
+      .node-sub { font-size: 15px; fill: #53657f; text-anchor: middle; }
+      .decision-text { font-size: 19px; font-weight: 700; text-anchor: middle; }
+      .line { fill: none; stroke: #41658f; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .line-green { fill: none; stroke: #238264; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-green); }
+      .return-line { fill: none; stroke: #238264; stroke-width: 3; stroke-dasharray: 9 7; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-green); }
+      .edge-label { font-size: 15px; font-weight: 700; fill: #274a78; }
+      .small { font-size: 14px; fill: #596a82; }
+      .badge { font-size: 13px; font-weight: 700; fill: #315b8f; }
+    </style>
+  </defs>
+  <rect width="1920" height="1420" fill="#f4f7fb"/>
+  <text class="title" x="960" y="55" text-anchor="middle">OrderProcessingGraph：从用户输入到订单草稿</text>
+  <text class="subtitle" x="960" y="84" text-anchor="middle">先看父图路由，再看订单子图；下方放大车型节点，标出“直接采用”和“自动估算”的区别</text>
+
+  <!-- Parent workflow -->
+  <rect class="panel" x="28" y="105" width="1864" height="265" rx="20"/>
+  <text class="panel-head" x="56" y="143">① 请求入口与 MainGraph</text>
+  <text class="panel-note" x="56" y="168">API 组装本轮消息、history、OrderContext、reference_time 与 deadline；MainGraph 负责主意图路由</text>
+
+  <rect class="node" x="62" y="211" width="250" height="96"/>
+  <text class="node-title" x="187" y="249">API 请求状态</text>
+  <text class="node-sub" x="187" y="276">message · history · OrderContext</text>
+  <text class="node-sub" x="187" y="297">reference_time · deadline</text>
+
+  <rect class="node" x="374" y="211" width="250" height="96"/>
+  <text class="node-title" x="499" y="249">intent_subgraph</text>
+  <text class="node-sub" x="499" y="278">识别主意图</text>
+
+  <polygon class="decision" points="755,190 850,259 755,328 660,259"/>
+  <text class="decision-text" x="755" y="255">main_intent</text>
+  <text class="decision-text" x="755" y="279">是什么？</text>
+
+  <rect class="node" x="975" y="137" width="202" height="82"/>
+  <text class="node-title" x="1076" y="172">qa_terminal</text>
+  <text class="node-sub" x="1076" y="199">当前为问答占位</text>
+
+  <rect class="node" x="1210" y="270" width="190" height="57"/>
+  <text class="node-title" x="1305" y="305" style="font-size:17px">mark_order_entered</text>
+
+  <rect class="node" x="1430" y="198" width="220" height="94"/>
+  <text class="node-title" x="1540" y="237">MainGraph</text>
+  <text class="node-title" x="1540" y="263">finalize</text>
+  <text class="node-sub" x="1540" y="284">汇总父图结果</text>
+
+  <rect class="result" x="1681" y="198" width="180" height="94"/>
+  <text class="node-title" x="1771" y="237">WorkflowEvent</text>
+  <text class="node-sub" x="1771" y="264" style="font-size:14px">进度 · 条件更新 · DONE</text>
+
+  <path class="line" d="M312 259 H374"/>
+  <path class="line" d="M624 259 H660"/>
+  <path class="line" d="M850 259 H907 V178 H975"/>
+  <text class="edge-label" x="870" y="244">qa</text>
+  <path class="line" d="M1177 178 H1305 V198 H1430"/>
+  <path class="line" d="M1650 245 H1681"/>
+  <path class="line" d="M755 328 V380 H45 V480 H150 V548"/>
+  <text class="edge-label" x="771" y="354">order：进入下方订单子图</text>
+  <path class="line" d="M1305 270 V235 H1430"/>
+  <path class="return-line" d="M1878 614 H1902 V298 H1400"/>
+  <text class="edge-label" x="1640" y="319" style="fill:#238264">订单子图结果回到父图</text>
+
+  <!-- Order child graph -->
+  <rect class="panel" x="28" y="397" width="1864" height="438" rx="20"/>
+  <text class="panel-head" x="56" y="435">② OrderProcessingGraph：解析增量、更新草稿、计算派生结果</text>
+  <text class="panel-note" x="56" y="460">可选节点由模型配置决定；货物画像只在原始 cargo 改变时重建，车型节点只在 vehicle_model 已配置时执行</text>
+
+  <rect class="node" x="62" y="548" width="176" height="92"/>
+  <text class="node-title" x="150" y="580">输入快照</text>
+  <text class="node-sub" x="150" y="607">消息 + 历史 + 草稿</text>
+  <text class="node-sub" x="150" y="628">时间锚点</text>
+
+  <rect class="node" x="274" y="548" width="150" height="92"/>
+  <text class="node-title" x="349" y="584">rewrite</text>
+  <text class="node-sub" x="349" y="612">补全本轮语义</text>
+
+  <rect class="node" x="460" y="548" width="150" height="92"/>
+  <text class="node-title" x="535" y="584">extract</text>
+  <text class="node-sub" x="535" y="612">抽取本轮实体</text>
+
+  <rect class="node" x="646" y="548" width="170" height="92"/>
+  <text class="node-title" x="731" y="579">update_context</text>
+  <text class="node-sub" x="731" y="607">normalize + Reducer</text>
+  <text class="node-sub" x="731" y="628">新草稿与标记</text>
+
+  <polygon class="decision" points="914,548 984,594 914,640 844,594"/>
+  <text class="decision-text" x="914" y="588" style="font-size:15px">画像模型已配</text>
+  <text class="decision-text" x="914" y="608" style="font-size:15px">且 cargo 改变？</text>
+
+  <rect class="node" x="840" y="472" width="197" height="61"/>
+  <text class="node-title" x="938" y="498" style="font-size:17px">cargo_profile</text>
+  <text class="node-sub" x="938" y="521" style="font-size:13px">基于完整 cargo 重建画像</text>
+
+  <polygon class="decision" points="1128,548 1198,594 1128,640 1058,594"/>
+  <text class="decision-text" x="1128" y="589" style="font-size:15px">车型模型</text>
+  <text class="decision-text" x="1128" y="609" style="font-size:15px">已配置？</text>
+
+  <rect class="node" x="1240" y="548" width="190" height="92"/>
+  <text class="node-title" x="1335" y="580">vehicle_resolution</text>
+  <text class="node-sub" x="1335" y="608">车型处理（见下方③）</text>
+  <text class="node-sub" x="1335" y="628">返回解析结果</text>
+
+  <rect class="node" x="1470" y="548" width="175" height="92"/>
+  <text class="node-title" x="1557" y="580">order_completeness</text>
+  <text class="node-sub" x="1557" y="608">检查最小必填字段</text>
+  <text class="node-sub" x="1557" y="628">不证明车辆适配</text>
+
+  <rect class="result" x="1683" y="548" width="193" height="92"/>
+  <text class="node-title" x="1779" y="580">子图 finalize</text>
+  <text class="node-sub" x="1779" y="608">OrderContext</text>
+  <text class="node-sub" x="1779" y="628">vehicle_result + summary</text>
+
+  <path class="line" d="M238 594 H274"/>
+  <path class="line" d="M424 594 H460"/>
+  <path class="line" d="M610 594 H646"/>
+  <path class="line" d="M816 594 H844"/>
+  <path class="line" d="M914 548 V533"/>
+  <text class="edge-label" x="926" y="546">YES</text>
+  <path class="line" d="M1037 502 H1128 V548"/>
+  <path class="line" d="M984 594 H1058"/>
+  <text class="edge-label" x="1000" y="583">NO</text>
+  <path class="line" d="M1198 594 H1240"/>
+  <text class="edge-label" x="1202" y="581">YES</text>
+  <path class="line" d="M1128 640 V692 H1557 V640"/>
+  <text class="edge-label" x="1161" y="681">NO：跳过车型</text>
+  <path class="line" d="M1430 594 H1470"/>
+  <path class="line" d="M1645 594 H1683"/>
+
+  <rect x="58" y="704" width="1390" height="82" rx="12" fill="#f7f9fc" stroke="#d9e2ed"/>
+  <text class="badge" x="80" y="731">读图要点</text>
+  <text class="small" x="80" y="756">cargo_profile 与 vehicle_resolution 都是可选能力：未配置时直接绕过；配置画像模型但 cargo 未变时也绕过画像重建。</text>
+  <text class="small" x="80" y="777">无论是否运行车型节点，order_completeness 都只给出字段完整性摘要；complete 不代表车辆已经通过装载校验。</text>
+
+  <!-- Vehicle resolution expansion -->
+  <rect class="panel" x="28" y="860" width="1864" height="520" rx="20"/>
+  <text class="panel-head" x="56" y="900">③ 放大 vehicle_resolution：用户车型快捷返回，其他情况才走自动估算</text>
+  <text class="panel-note" x="56" y="925">只有上方车型模型已配置时才会进入这个节点；这里的“直接采用”是当前实现的快捷判断，不等于做过适配校验</text>
+
+  <rect class="node" x="62" y="1050" width="226" height="105"/>
+  <text class="node-title" x="175" y="1084">车辆实体</text>
+  <text class="node-sub" x="175" y="1111">+ 当前 OrderContext</text>
+  <text class="node-sub" x="175" y="1135">规范车型 / 规格 / 未匹配原话</text>
+
+  <polygon class="decision" points="440,1006 548,1102 440,1198 332,1102"/>
+  <text class="decision-text" x="440" y="1095" style="font-size:17px">已有车型可直接</text>
+  <text class="decision-text" x="440" y="1118" style="font-size:17px">采用？</text>
+
+  <rect class="result" x="643" y="981" width="350" height="123"/>
+  <text class="node-title" x="818" y="1018">source = user_matched</text>
+  <text class="node-sub" x="818" y="1048">直接返回草稿中的车型与规格</text>
+  <text class="node-sub" x="818" y="1075">跳过自动估算与装载适配计算</text>
+
+  <rect class="node" x="643" y="1142" width="405" height="157"/>
+  <text class="node-title" x="845" y="1177">确定性自动估算</text>
+  <text class="node-sub" x="845" y="1206">依据 cargo_profiles + 装货城市目录</text>
+  <text class="node-sub" x="845" y="1234">下界通过：可作估算主车型</text>
+  <text class="node-sub" x="845" y="1261">仅上界通过：低优先级候选，不作主车型</text>
+  <text class="node-sub" x="845" y="1286">规格会附加到结果，但当前不用于过滤目录</text>
+
+  <rect class="result" x="1260" y="1055" width="348" height="121"/>
+  <text class="node-title" x="1434" y="1092">VehicleResolutionResult</text>
+  <text class="node-sub" x="1434" y="1120">返回订单主流程</text>
+  <text class="node-sub" x="1434" y="1145">继续进入 order_completeness</text>
+
+  <rect x="1650" y="1040" width="206" height="147" rx="13" fill="#fff9ed" stroke="#e8c27f" stroke-width="2"/>
+  <text class="node-title" x="1753" y="1077" style="font-size:17px">重要边界</text>
+  <text class="small" x="1753" y="1105" text-anchor="middle">冷链等规格目前</text>
+  <text class="small" x="1753" y="1128" text-anchor="middle">不筛选车型能力；</text>
+  <text class="small" x="1753" y="1151" text-anchor="middle">user_matched 也不代表</text>
+  <text class="small" x="1753" y="1174" text-anchor="middle">车辆适配已通过。</text>
+
+  <path class="line" d="M288 1102 H332"/>
+  <path class="line-green" d="M548 1078 H643"/>
+  <text class="edge-label" x="575" y="1065" style="fill:#238264">YES</text>
+  <path class="line" d="M440 1198 V1220 H643"/>
+  <text class="edge-label" x="458" y="1216">NO</text>
+  <path class="line-green" d="M993 1042 H1135 V1080 H1260"/>
+  <path class="line-green" d="M1048 1220 H1145 V1150 H1260"/>
+  <path class="line" d="M1608 1115 H1650"/>
+
+  <rect x="62" y="1317" width="1546" height="42" rx="10" fill="#eef4ff" stroke="#c8d9f1"/>
+  <text class="small" x="82" y="1344">注意：Reducer 记录 vehicle_specs 时也会设置 vehicle_source=user_matched；已有估算车型遇到新规格时，可能因此触发快捷返回并跳过重新估算。</text>
+</svg>
