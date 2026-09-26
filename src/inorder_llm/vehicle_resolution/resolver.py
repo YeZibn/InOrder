@@ -135,13 +135,20 @@ class VehicleResolutionResolver:
         self.client = client  # retained only for constructor compatibility
         self.catalog_provider = catalog_provider or LocalVehicleCatalogProvider()
 
-    def resolve(self, cargo_profiles: Sequence[Mapping[str, Any]], summary: Mapping[str, Any] | None, raw_vehicle_text: str | None = None, effective_city: str | None = None) -> VehicleResolutionResult:
+    def resolve(
+        self,
+        cargo_profiles: Sequence[Mapping[str, Any]],
+        summary: Mapping[str, Any] | None,
+        raw_vehicle_text: str | None = None,
+        effective_city: str | None = None,
+        vehicle_specs: Sequence[str] = (),
+    ) -> VehicleResolutionResult:
         summary = summary or {}
         catalog = self.catalog_provider.get_catalog(normalize_city(effective_city))
         total_weight = _number(summary.get("total_weight_kg")) or sum(_number(item.get("weight_kg")) or 0.0 for item in cargo_profiles)
         total_volume = _number(summary.get("total_volume_m3")) or sum(_number(item.get("volume_m3")) or 0.0 for item in cargo_profiles)
         boxes, dimensions_complete = _boxes(cargo_profiles)
-        specs = _required_specs(cargo_profiles)
+        specs = list(dict.fromkeys([*_required_specs(cargo_profiles), *vehicle_specs]))
         candidates = []
         for vehicle in catalog.vehicle_types:
             if not cargo_profiles or not dimensions_complete:

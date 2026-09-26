@@ -1,14 +1,8 @@
-# vehicle-resolution-and-estimation Specification
-
-## Purpose
-
-为订单提供遵循用户明确车型选择的最终车型解析，并在缺少可用用户车型时利用货物画像估算车型，形成可解释且不擅自替换用户选择的决策结果。
-
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Maintain current vehicle provenance
 
-`OrderContext.vehicle_type` SHALL contain only the current effective canonical vehicle type. When it is present, `vehicle_source` SHALL be `user_matched` or `estimated`; when no effective canonical vehicle exists, both fields SHALL be empty. `user_matched` SHALL be set only when an explicit user `vehicle_type` expression successfully matches the vehicle catalog. `vehicle_specs` SHALL retain user-provided vehicle constraints and SHALL NOT determine or change the source of `vehicle_type`. Cargo-derived vehicle specifications SHALL remain in the current resolution result and SHALL NOT be persisted as user-provided context. Specifications in the resolution result describe requirements and SHALL NOT be treated as proof that a candidate vehicle supports them.
+`OrderContext.vehicle_type` SHALL contain only the current effective canonical vehicle type. When it is present, `vehicle_source` SHALL be `user_matched` or `estimated`; when no effective canonical vehicle exists, both fields SHALL be empty. `user_matched` SHALL be set only when an explicit user `vehicle_type` expression successfully matches the vehicle catalog. `vehicle_specs` SHALL retain user-provided vehicle constraints and SHALL NOT determine or change the source of `vehicle_type`. Cargo-derived vehicle specifications SHALL remain in the current resolution result and SHALL NOT be persisted as user-provided context.
 
 #### Scenario: Add a user vehicle specification to an estimated vehicle
 - **WHEN** the current context has `vehicle_type=truck_5m2` and `vehicle_source=estimated`, and the user adds the matched `cold_chain` specification without selecting a vehicle type
@@ -22,6 +16,8 @@
 - **WHEN** vehicle resolution has no lower-bound primary vehicle and no matched user vehicle remains
 - **THEN** the system SHALL set `OrderContext.vehicle_type` and `OrderContext.vehicle_source` to empty values
 
+## MODIFIED Requirements
+
 ### Requirement: Prefer a matched user vehicle
 
 The system SHALL first match explicit user vehicle expressions against the vehicle catalog. When a user-provided `vehicle_type` matches, the system SHALL adopt its canonical type, retain any user-provided specifications, and mark the effective context and resolution source as `user_matched`. While a matched user vehicle remains active, the system SHALL preserve it across cargo, pickup-city, and vehicle-specification changes; it SHALL NOT perform cargo-fit estimation or replace the selected type based on those changes. A later successfully matched explicit user vehicle SHALL replace the previous active type.
@@ -34,10 +30,6 @@ The system SHALL first match explicit user vehicle expressions against the vehic
 - **WHEN** the current context has a matched user vehicle and the user adds, removes, or changes cargo quantities or dimensions
 - **THEN** the system SHALL retain the matched user vehicle without invoking cargo-fit estimation or automatically replacing it
 
-#### Scenario: Keep a matched vehicle despite cargo estimates
-- **WHEN** a successfully matched user vehicle is active and the cargo profile indicates that another vehicle might be more suitable
-- **THEN** the system SHALL keep the user-matched vehicle and SHALL NOT run cargo-fit estimation or automatically replace the selection
-
 #### Scenario: Keep a matched vehicle despite pickup-city or specification changes
 - **WHEN** the current context has a matched user vehicle and the pickup city or user-provided vehicle specifications change
 - **THEN** the system SHALL retain the matched user vehicle without cargo-fit estimation or automatic replacement
@@ -48,7 +40,7 @@ The system SHALL first match explicit user vehicle expressions against the vehic
 
 ### Requirement: Estimate when no usable user vehicle exists
 
-When no matched user vehicle is active, the system SHALL estimate from the current cargo profiles, cargo summary, and effective city, and SHALL retain current user-provided vehicle specifications in the resolution result. It SHALL return at most three candidates using the existing deterministic vehicle-capability calculation. Candidates passing all capability lower-bound checks SHALL be marked `lower_bound_fit`; candidates passing only upper-bound checks SHALL be marked `upper_bound_only` and ordered after lower-bound candidates. Within each fit level, the system SHALL prefer vehicles with smaller sufficient capacity. Only a `lower_bound_fit` candidate SHALL become the estimated primary vehicle. The system SHALL NOT call an LLM to select a vehicle. This change SHALL NOT introduce vehicle-type/specification compatibility rules absent from the catalog; specifications in a resolution result are requirements, not confirmation of candidate capability. When an active estimated vehicle's cargo profiles, effective pickup city, or user-provided vehicle specifications change, the system SHALL resolve again using the current inputs. If resolution produces no lower-bound primary vehicle, the system SHALL clear the previous estimated `vehicle_type` and `vehicle_source` while retaining any candidates and explanation in the resolution result. The effective city SHALL prefer the order pickup city, then the caller's user-location city, then the national default catalog.
+When no matched user vehicle is active, the system SHALL estimate from the current cargo profiles, cargo summary, and effective city, and SHALL retain current user-provided vehicle specifications in the resolution result. It SHALL return at most three candidates, using the existing deterministic vehicle-capability calculation and ordering. Candidates passing all capability lower-bound checks SHALL be marked `lower_bound_fit`; candidates passing only upper-bound checks SHALL be marked `upper_bound_only` and ordered after lower-bound candidates. Only a `lower_bound_fit` candidate SHALL become the estimated primary vehicle. This change SHALL NOT introduce vehicle-type/specification compatibility rules absent from the catalog. When an active estimated vehicle's cargo profiles, effective pickup city, or user-provided vehicle specifications change, the system SHALL resolve again using the current inputs. If resolution produces no lower-bound primary vehicle, the system SHALL clear the previous estimated `vehicle_type` and `vehicle_source` while retaining any candidates and explanation in the resolution result. The effective city SHALL prefer the order pickup city, then the caller's user-location city, then the national default catalog.
 
 #### Scenario: Estimate without a vehicle expression
 - **WHEN** the user provides cargo information and there is no active matched user vehicle
@@ -75,12 +67,12 @@ When no matched user vehicle is active, the system SHALL estimate from the curre
 - **THEN** the system SHALL clear the old context vehicle type and source while returning any upper-bound candidates and the reason for the result
 
 #### Scenario: Fall back from an unmatched expression when no user vehicle remains
-- **WHEN** the user inputs “大车”, “小车”, “之前那辆车” or another vehicle expression that cannot be uniquely matched, and no matched user vehicle remains active
-- **THEN** the system SHALL keep the raw expression in the resolution result or its explanation, use deterministic estimation for at most three candidates, and SHALL NOT write the expression as a canonical value
+- **WHEN** a vehicle expression cannot be uniquely matched and no matched user vehicle remains active
+- **THEN** the system SHALL keep the raw expression in the resolution result and use deterministic estimation without writing that expression as a canonical value
 
 #### Scenario: Estimate with pickup city catalog
 - **WHEN** no matched user vehicle is active and the order pickup city is 温州
-- **THEN** the system SHALL use the 温州 catalog for weight, volume, and extreme-point loading calculations
+- **THEN** the system SHALL use the 温州 catalog for vehicle estimation
 
 #### Scenario: Fall back to user location
 - **WHEN** the order pickup city is absent and the caller's user-location city is 上海
@@ -105,19 +97,3 @@ An unmatched vehicle expression SHALL remain available as raw input in the resol
 #### Scenario: Remove a selected vehicle and estimate from remaining constraints
 - **WHEN** the user explicitly removes the vehicle selection
 - **THEN** the system SHALL clear the active vehicle type and source, retain remaining user vehicle specifications, and proceed to deterministic estimation
-
-### Requirement: Return an explainable resolution result
-
-车型决策结果 SHALL 至少包含最终车型、车型特殊规格（如有）、来源和原因；估算结果还 SHALL 包含 0 至 3 个候选及其 `fit_level` 和排序原因，并记录 `effective_city`、`vehicle_data_source`、目录版本及是否使用过期缓存。`fit_level` SHALL 区分 `lower_bound_fit` 与 `upper_bound_only`；结果不得以无等级的 `fit=true` 将仅上界通过候选表示为下界通过。来源 SHALL 为 `user_matched` 或 `estimated`。
-
-#### Scenario: Report user match source
-- **WHEN** 用户车型成功匹配主数据
-- **THEN** 结果包含 canonical 车型及 `source="user_matched"`
-
-#### Scenario: Report estimation source and candidate levels
-- **WHEN** 车型由货物画像推断得到
-- **THEN** 结果包含 `source="estimated"`、各候选的 `fit_level` 及相应估算依据
-
-#### Scenario: Report catalog provenance
-- **WHEN** 车型由城市目录估算得到
-- **THEN** 结果包含有效城市、目录来源、目录版本和过期状态

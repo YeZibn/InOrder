@@ -109,6 +109,26 @@ def test_rule_resolver_does_not_call_client():
     assert result.candidates
 
 
+def test_rule_resolver_keeps_user_and_cargo_derived_specs_in_result():
+    provider = _StaticCatalogProvider([
+        _vehicle("small_cold_truck", length=(1.2, 1.2), volume=(1.2, 1.2), payload=(0.5, 0.5)),
+    ])
+    result = VehicleResolutionResolver(catalog_provider=provider).resolve(
+        [{
+            "name": "冷藏货物",
+            "weight_kg": 100,
+            "volume_m3": 1.0,
+            "temperature": "refrigerated",
+            "dimensions_cm": {"length": 100, "width": 100, "height": 100},
+        }],
+        {"total_weight_kg": 100, "total_volume_m3": 1.0},
+        vehicle_specs=["tail_lift"],
+    )
+
+    assert result.vehicle_specs == ["cold_chain", "tail_lift"]
+    assert result.candidates[0]["vehicle_specs"] == ["cold_chain", "tail_lift"]
+
+
 def test_missing_cargo_dimensions_do_not_pass_as_a_feasible_load():
     result = VehicleResolutionResolver().resolve(
         [{"name": "未知尺寸货物", "weight_kg": 100, "volume_m3": 0.2}],

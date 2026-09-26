@@ -1,6 +1,7 @@
 """Nodes for the standalone order-processing subgraph."""
 
 import inspect
+from copy import deepcopy
 from dataclasses import replace
 from typing import Any, Dict, Literal
 
@@ -12,6 +13,11 @@ from ...normalization import normalize_entities
 from ...vehicle_resolution.models import VehicleResolutionResult
 from ...order_summary import check_order_completeness
 from .state import OrderGraphState
+
+
+def _entity_action(entity) -> str:
+    action = entity.attributes.get("action")
+    return action if action in ("add", "set", "remove", "replace") else entity.action
 
 
 class RewriteNode(BaseNode[OrderGraphState]):
@@ -90,10 +96,21 @@ class ContextUpdateNode(BaseNode[OrderGraphState]):
     def run(self, state: OrderGraphState) -> Dict[str, Any]:
         original = state["order_context"]
         updated = self.reducer.apply(original, state.get("entities", []))
+        user_location = state.get("user_location") or {}
+
+        def effective_city(context):
+            pickup = context.pickup_location if isinstance(context.pickup_location, dict) else {}
+            return pickup.get("city") or user_location.get("city")
+
         return {
             "order_context": updated,
             "order_context_updated": updated != original,
             "cargo_updated": updated.cargo != original.cargo,
+            "vehicle_estimate_inputs_changed": (
+                updated.cargo != original.cargo
+                or effective_city(updated) != effective_city(original)
+                or updated.vehicle_specs != original.vehicle_specs
+            ),
         }
 
 
@@ -169,44 +186,92 @@ class VehicleResolutionNode(BaseNode[OrderGraphState]):
         self.model = model
 
     def run(self, state: OrderGraphState) -> Dict[str, Any]:
-        context = state["order_context"]
+        original_context = state["order_context"]
+        context = deepcopy(original_context)
         entities = state.get("entities", [])
         vehicle_entities = [entity for entity in normalize_entities(entities) if entity.type in ("vehicle_type", "vehicle_specs")]
-        unresolved = [entity for entity in vehicle_entities if entity.attributes.get("normalization_accepted") is False]
-        matched_specs = [
-            entity.attributes["value"]
-            for entity in vehicle_entities
-            if entity.type == "vehicle_specs"
-            and entity.attributes.get("normalization_accepted") is not False
-            and isinstance(entity.attributes.get("value"), str)
+        unresolved_types = [
+            entity for entity in vehicle_entities
+            if entity.type == "vehicle_type" and entity.attributes.get("normalization_accepted") is False
         ]
-        has_matched_user_vehicle = bool(context.vehicle_type) and not unresolved and (
-            bool(vehicle_entities) or context.vehicle_source in (None, "user_matched")
-        )
-        if has_matched_user_vehicle:
-            from ...catalog import get_vehicle_type
-            specs = list(context.vehicle_specs)
-            type_record = get_vehicle_type(context.vehicle_type)
-            label = type_record.label if type_record else context.vehicle_type
+        if context.vehicle_type and context.vehicle_source is None:
+            # Compatibility for legacy contexts with a canonical vehicle but
+            # no provenance; OrderContextReducer applies the same rule.
+            context.vehicle_source = "user_matched"
+        if not context.vehicle_type:
+            context.vehicle_source = None
+
+        if context.vehicle_type and context.vehicle_source == "user_matched":
+            raw_text = unresolved_types[0].extraction_text if unresolved_types else None
+            reason = "采用用户指定车型。"
+            if raw_text:
+                reason += f"本轮车型表达“{raw_text}”未能唯一匹配，因此保留当前用户选择。"
             return {
                 "vehicle_resolution": VehicleResolutionResult(
-                    context.vehicle_type, specs, "user_matched",
-                    f"采用用户指定车型：{label}",
-                )
+                    context.vehicle_type,
+                    list(context.vehicle_specs),
+                    "user_matched",
+                    reason,
+                    raw_vehicle_text=raw_text,
+                ),
+                "order_context": context,
+                "order_context_updated": context != original_context,
             }
-        raw_text = unresolved[0].extraction_text if unresolved else None
+
+        raw_text = unresolved_types[0].extraction_text if unresolved_types else None
+        if (
+            context.vehicle_type
+            and unresolved_types
+            and _entity_action(unresolved_types[0]) != "replace"
+            and not state.get("vehicle_estimate_inputs_changed", False)
+        ):
+            return {
+                "vehicle_resolution": VehicleResolutionResult(
+                    context.vehicle_type,
+                    list(context.vehicle_specs),
+                    "estimated",
+                    "保留当前估算车型；本轮无法匹配的表达未明确要求替换。",
+                    raw_vehicle_text=raw_text,
+                ),
+                "order_context": context,
+                "order_context_updated": context != original_context,
+            }
         pickup = context.pickup_location if isinstance(context.pickup_location, dict) else {}
         user_location = state.get("user_location") or {}
         effective_city = pickup.get("city") or user_location.get("city")
-        parameters = inspect.signature(self.model.resolve).parameters.values()
-        if any(p.name == "effective_city" or p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters):
-            result = self.model.resolve(context.cargo_profiles, context.cargo_profile_summary, raw_text, effective_city=effective_city)
-        else:
-            result = self.model.resolve(context.cargo_profiles, context.cargo_profile_summary, raw_text)
-        if matched_specs:
-            merged_specs = list(dict.fromkeys([*result.vehicle_specs, *matched_specs]))
-            result = replace(result, vehicle_specs=merged_specs)
-        from copy import deepcopy
+        parameters = inspect.signature(self.model.resolve).parameters
+        accepts_kwargs = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        kwargs = {}
+        if "effective_city" in parameters or accepts_kwargs:
+            kwargs["effective_city"] = effective_city
+        if "vehicle_specs" in parameters or accepts_kwargs:
+            kwargs["vehicle_specs"] = list(context.vehicle_specs)
+        result = self.model.resolve(
+            context.cargo_profiles,
+            context.cargo_profile_summary,
+            raw_text,
+            **kwargs,
+        )
+
+        def merge_specs(*groups):
+            return list(dict.fromkeys(
+                item for group in groups for item in group
+                if isinstance(item, str) and item
+            ))
+
+        # Keep user-provided specifications in every result, including legacy
+        # injected resolvers that do not accept the optional argument yet.
+        result_specs = merge_specs(result.vehicle_specs, context.vehicle_specs)
+        candidates = []
+        for candidate in result.candidates:
+            item = dict(candidate)
+            item["vehicle_specs"] = merge_specs(item.get("vehicle_specs", []), context.vehicle_specs)
+            candidates.append(item)
+        result = replace(result, vehicle_specs=result_specs, candidates=candidates)
+
         updated = deepcopy(context)
         lower_bound_primary = next(
             (
@@ -216,26 +281,25 @@ class VehicleResolutionNode(BaseNode[OrderGraphState]):
             ),
             None,
         ) if result.source == "estimated" else None
-        if lower_bound_primary is not None:
-            primary_type = lower_bound_primary.get("vehicle_type")
-            if isinstance(primary_type, str) and primary_type:
-                primary_specs = list(lower_bound_primary.get("vehicle_specs", result.vehicle_specs))
-                if matched_specs:
-                    primary_specs = list(dict.fromkeys([*primary_specs, *matched_specs]))
-                result = replace(
-                    result,
-                    vehicle_type=primary_type,
-                    vehicle_specs=primary_specs,
-                )
-                updated.vehicle_type = result.vehicle_type
-                updated.vehicle_specs = list(result.vehicle_specs)
-                updated.vehicle_source = "estimated"
+        primary_type = lower_bound_primary.get("vehicle_type") if lower_bound_primary else None
+        if isinstance(primary_type, str) and primary_type:
+            result = replace(
+                result,
+                vehicle_type=primary_type,
+                vehicle_specs=list(lower_bound_primary.get("vehicle_specs", result.vehicle_specs)),
+            )
+            updated.vehicle_type = primary_type
+            updated.vehicle_source = "estimated"
         else:
-            if result.source == "estimated" and result.vehicle_type:
+            if result.source == "estimated":
                 result = replace(result, vehicle_type="")
-            if matched_specs:
-                updated.vehicle_specs = list(dict.fromkeys([*updated.vehicle_specs, *matched_specs]))
-        return {"vehicle_resolution": result, "order_context": updated, "order_context_updated": updated != context}
+                if updated.vehicle_source == "estimated":
+                    updated.vehicle_type = None
+                    updated.vehicle_source = None
+            if not updated.vehicle_type:
+                updated.vehicle_source = None
+
+        return {"vehicle_resolution": result, "order_context": updated, "order_context_updated": updated != original_context}
 
 
 __all__ = [

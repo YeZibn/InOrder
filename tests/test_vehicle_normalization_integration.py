@@ -16,10 +16,11 @@ def test_ensemble_accepts_high_confidence_variant():
     assert entity.attributes["normalization_accepted"] is True
 
 
-def test_unsafe_vehicle_does_not_overwrite_context():
+def test_unmatched_vehicle_replacement_clears_context_vehicle():
     context = OrderContext(vehicle_type="truck_5m2")
     updated = OrderContextReducer().apply(context, [Entity("vehicle_type", "replace", {"value": "4米以上"}, "4米以上")])
-    assert updated.vehicle_type == "truck_5m2"
+    assert updated.vehicle_type is None
+    assert updated.vehicle_source is None
 
 
 def test_vehicle_types_are_not_mixed():

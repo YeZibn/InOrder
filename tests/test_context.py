@@ -93,6 +93,84 @@ def test_reducer_preserves_location_city_and_full_address():
     }
 
 
+def test_vehicle_specs_updates_do_not_change_vehicle_source():
+    context = OrderContext(vehicle_type="truck_5m2", vehicle_source="estimated")
+    reducer = OrderContextReducer()
+
+    updated = reducer.apply(
+        context,
+        [Entity("vehicle_specs", "set", {"value": "冷链"}, "冷链")],
+    )
+
+    assert updated.vehicle_type == "truck_5m2"
+    assert updated.vehicle_source == "estimated"
+    assert updated.vehicle_specs == ["cold_chain"]
+
+
+def test_matched_vehicle_type_replaces_estimated_vehicle_and_source():
+    context = OrderContext(vehicle_type="truck_5m2", vehicle_source="estimated")
+
+    updated = OrderContextReducer().apply(
+        context,
+        [Entity("vehicle_type", "replace", {"value": "9米6"}, "换成9米6")],
+    )
+
+    assert updated.vehicle_type == "truck_9m6"
+    assert updated.vehicle_source == "user_matched"
+
+
+def test_unmatched_explicit_vehicle_replace_clears_previous_selection():
+    context = OrderContext(vehicle_type="truck_4m2", vehicle_source="user_matched")
+
+    updated = OrderContextReducer().apply(
+        context,
+        [Entity("vehicle_type", "replace", {"value": "大车"}, "换成大车")],
+    )
+
+    assert updated.vehicle_type is None
+    assert updated.vehicle_source is None
+    assert context.vehicle_type == "truck_4m2"
+
+
+def test_unmatched_nonreplacement_vehicle_expression_preserves_context():
+    context = OrderContext(vehicle_type="truck_4m2", vehicle_source="user_matched")
+
+    updated = OrderContextReducer().apply(
+        context,
+        [Entity("vehicle_type", "set", {"value": "大车"}, "大车合适吗")],
+    )
+
+    assert updated.vehicle_type == "truck_4m2"
+    assert updated.vehicle_source == "user_matched"
+
+
+def test_vehicle_remove_clears_type_and_source_even_if_expression_is_unmatched():
+    context = OrderContext(vehicle_type="truck_4m2", vehicle_source="user_matched")
+
+    updated = OrderContextReducer().apply(
+        context,
+        [Entity(
+            "vehicle_type",
+            "remove",
+            {"value": "未识别车型", "normalization_accepted": False},
+            "车型不限",
+        )],
+    )
+
+    assert updated.vehicle_type is None
+    assert updated.vehicle_source is None
+
+
+def test_legacy_vehicle_without_source_is_normalized_as_user_matched():
+    context = OrderContext(vehicle_type="truck_4m2")
+
+    updated = OrderContextReducer().apply(context, [])
+
+    assert updated.vehicle_type == "truck_4m2"
+    assert updated.vehicle_source == "user_matched"
+    assert context.vehicle_source is None
+
+
 def test_reducer_cargo_add_and_remove():
     reducer = OrderContextReducer()
     first = reducer.apply(OrderContext(), [Entity("cargo", "set", {"name": "苹果", "weight": "2吨"})])

@@ -40,6 +40,8 @@ class VehicleResolutionModel(Protocol):
         cargo_profiles: Sequence[Mapping[str, Any]],
         cargo_profile_summary: Mapping[str, Any] | None,
         raw_vehicle_text: str | None = None,
+        effective_city: str | None = None,
+        vehicle_specs: Sequence[str] = (),
     ) -> VehicleResolutionResult:
         ...
 

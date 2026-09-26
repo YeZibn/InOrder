@@ -53,8 +53,14 @@ class FakeVehicleResolution:
         self.result = result
         self.calls = []
 
-    def resolve(self, cargo_profiles, summary, raw_vehicle_text=None):
-        self.calls.append((deepcopy(cargo_profiles), deepcopy(summary), raw_vehicle_text))
+    def resolve(self, cargo_profiles, summary, raw_vehicle_text=None, effective_city=None, vehicle_specs=()):
+        self.calls.append((
+            deepcopy(cargo_profiles),
+            deepcopy(summary),
+            raw_vehicle_text,
+            effective_city,
+            list(vehicle_specs),
+        ))
         return self.result
 
 
@@ -117,9 +123,35 @@ def test_matched_user_vehicle_short_circuits_estimation():
     assert estimator.calls == []
 
 
+def test_removing_user_vehicle_runs_estimation_and_keeps_specs():
+    rewrite = FakeRewriteModel(RewriteResult("重新推荐车型", "移除当前车型"))
+    extractor = FakeExtractor([Entity("vehicle_type", "remove", {"value": "4米2"}, "当前车型")])
+    estimator = FakeVehicleResolution(VehicleResolutionResult(
+        "truck_6m8", ["cold_chain"], "estimated", "下界通过。",
+        candidates=[{"vehicle_type": "truck_6m8", "vehicle_specs": [], "fit_level": "lower_bound_fit"}],
+    ))
+    existing = OrderContext(
+        vehicle_type="truck_4m2",
+        vehicle_source="user_matched",
+        vehicle_specs=["cold_chain"],
+        cargo_profiles=[{"name": "苹果"}],
+        cargo_profile_summary={"total_weight_kg": 1000},
+    )
+
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(
+        _state(context=existing)
+    )
+
+    assert len(estimator.calls) == 1
+    assert estimator.calls[0][4] == ["cold_chain"]
+    assert result["order_context"].vehicle_type == "truck_6m8"
+    assert result["order_context"].vehicle_source == "estimated"
+    assert result["order_context"].vehicle_specs == ["cold_chain"]
+
+
 def test_unmatched_vehicle_falls_back_to_estimation():
-    rewrite = FakeRewriteModel(RewriteResult("设置大车", "设置大车"))
-    extractor = FakeExtractor([Entity("vehicle_type", "set", {}, "大车")])
+    rewrite = FakeRewriteModel(RewriteResult("换成大车", "换成大车"))
+    extractor = FakeExtractor([Entity("vehicle_type", "replace", {}, "大车")])
     estimator = FakeVehicleResolution(VehicleResolutionResult(
         "", [], "estimated", "大车无法唯一匹配，只有上界候选。",
         candidates=[{"vehicle_type": "truck_6m8", "vehicle_specs": [], "fit_level": "upper_bound_only"}],
@@ -130,9 +162,143 @@ def test_unmatched_vehicle_falls_back_to_estimation():
     assert result["vehicle_resolution"].source == "estimated"
     assert result["vehicle_resolution"].candidates[0]["fit_level"] == "upper_bound_only"
     assert estimator.calls[0][2] == "大车"
-    assert result["order_context"].vehicle_type == "truck_5m2"
+    assert estimator.calls[0][4] == ["cold_chain"]
+    assert result["order_context"].vehicle_type is None
     assert result["order_context"].vehicle_specs == ["cold_chain"]
+    assert result["order_context"].vehicle_source is None
+
+
+def test_unmatched_nonreplacement_expression_preserves_user_vehicle():
+    rewrite = FakeRewriteModel(RewriteResult("大车怎么样", "大车怎么样"))
+    extractor = FakeExtractor([Entity("vehicle_type", "set", {"value": "大车"}, "大车怎么样")])
+    estimator = FakeVehicleResolution(VehicleResolutionResult("truck_6m8", [], "estimated", "不应调用"))
+    existing = OrderContext(vehicle_type="truck_4m2", vehicle_source="user_matched")
+
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(
+        _state(context=existing)
+    )
+
+    assert estimator.calls == []
+    assert result["order_context"].vehicle_type == "truck_4m2"
     assert result["order_context"].vehicle_source == "user_matched"
+    assert result["vehicle_resolution"].raw_vehicle_text == "大车怎么样"
+
+
+def test_user_vehicle_stays_locked_when_cargo_changes():
+    rewrite = FakeRewriteModel(RewriteResult("再加一吨苹果", "再加一吨苹果"))
+    extractor = FakeExtractor([Entity("cargo", "add", {"name": "苹果", "weight": "1吨"}, "一吨苹果")])
+    profile = FakeCargoProfile(_cargo_profile_result())
+    estimator = FakeVehicleResolution(VehicleResolutionResult("truck_6m8", [], "estimated", "不应调用"))
+    existing = OrderContext(
+        vehicle_type="truck_4m2",
+        vehicle_source="user_matched",
+        cargo=[{"name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}],
+    )
+
+    result = build_order_processing_graph(
+        rewrite, extractor, profile, vehicle_model=estimator
+    ).invoke(_state(context=existing))
+
+    assert len(profile.calls) == 1
+    assert estimator.calls == []
+    assert result["order_context"].vehicle_type == "truck_4m2"
+    assert result["order_context"].vehicle_source == "user_matched"
+
+
+def test_new_matched_vehicle_replaces_previous_estimate():
+    rewrite = FakeRewriteModel(RewriteResult("还是用4米2", "还是用4米2"))
+    extractor = FakeExtractor([Entity("vehicle_type", "replace", {"value": "4米2"}, "4米2")])
+    estimator = FakeVehicleResolution(VehicleResolutionResult("truck_6m8", [], "estimated", "不应调用"))
+    existing = OrderContext(vehicle_type="truck_7m6", vehicle_source="estimated")
+
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(
+        _state(context=existing)
+    )
+
+    assert estimator.calls == []
+    assert result["order_context"].vehicle_type == "truck_4m2"
+    assert result["order_context"].vehicle_source == "user_matched"
+
+
+def test_estimated_vehicle_is_recomputed_after_cargo_change():
+    rewrite = FakeRewriteModel(RewriteResult("把苹果增加到两吨", "苹果增加到两吨"))
+    extractor = FakeExtractor([Entity("cargo", "replace", {"name": "苹果", "weight": "2吨"}, "两吨苹果")])
+    profile_result = _cargo_profile_result("新苹果")
+    profile = FakeCargoProfile(profile_result)
+    estimator = FakeVehicleResolution(VehicleResolutionResult(
+        "truck_6m8", [], "estimated", "新货物的下界候选通过。",
+        candidates=[{"vehicle_type": "truck_6m8", "vehicle_specs": [], "fit_level": "lower_bound_fit"}],
+    ))
+    existing = OrderContext(
+        vehicle_type="truck_4m2",
+        vehicle_specs=["tail_lift"],
+        vehicle_source="estimated",
+        cargo=[{"name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": []}],
+        cargo_profiles=[{"name": "旧苹果"}],
+        cargo_profile_summary={"total_weight_kg": 1000},
+    )
+
+    result = build_order_processing_graph(
+        rewrite, extractor, profile, estimator
+    ).invoke(_state(context=existing))
+
+    assert profile.calls[0][0]["weight"] == ["2吨"]
+    assert estimator.calls[0][0] == [item.to_dict() for item in profile_result.cargo_profiles]
+    assert estimator.calls[0][4] == ["tail_lift"]
+    assert result["order_context"].vehicle_type == "truck_6m8"
+    assert result["order_context"].vehicle_source == "estimated"
+    assert result["order_context"].vehicle_specs == ["tail_lift"]
+
+
+def test_estimated_vehicle_clears_when_recomputation_has_no_primary():
+    rewrite = FakeRewriteModel(RewriteResult("重新核算车型", "重新核算车型"))
+    extractor = FakeExtractor()
+    estimator = FakeVehicleResolution(VehicleResolutionResult(
+        "", [], "estimated", "只有上界候选。",
+        candidates=[{"vehicle_type": "truck_6m8", "vehicle_specs": [], "fit_level": "upper_bound_only"}],
+    ))
+    existing = OrderContext(
+        vehicle_type="truck_4m2",
+        vehicle_specs=["cold_chain"],
+        vehicle_source="estimated",
+    )
+
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(
+        _state(context=existing)
+    )
+
+    assert result["vehicle_resolution"].vehicle_type == ""
+    assert result["vehicle_resolution"].candidates[0]["fit_level"] == "upper_bound_only"
+    assert result["order_context"].vehicle_type is None
+    assert result["order_context"].vehicle_source is None
+    assert result["order_context"].vehicle_specs == ["cold_chain"]
+
+
+def test_estimate_receives_current_pickup_city_and_user_specs():
+    rewrite = FakeRewriteModel(RewriteResult("起点改杭州，需要冷链和尾板", "起点改杭州，需要尾板"))
+    extractor = FakeExtractor([
+        Entity("location", "replace", {"role": "pickup", "city": "杭州"}, "杭州"),
+        Entity("vehicle_specs", "add", {"value": "尾板"}, "尾板"),
+    ])
+    estimator = FakeVehicleResolution(VehicleResolutionResult(
+        "truck_6m8", [], "estimated", "下界通过。",
+        candidates=[{"vehicle_type": "truck_6m8", "vehicle_specs": [], "fit_level": "lower_bound_fit"}],
+    ))
+    existing = OrderContext(
+        vehicle_type="truck_5m2",
+        vehicle_specs=["cold_chain"],
+        vehicle_source="estimated",
+        pickup_location={"city": "上海"},
+    )
+
+    result = build_order_processing_graph(rewrite, extractor, vehicle_model=estimator).invoke(
+        _state(context=existing)
+    )
+
+    assert estimator.calls[0][3] == "杭州"
+    assert estimator.calls[0][4] == ["cold_chain", "tail_lift"]
+    assert result["vehicle_resolution"].vehicle_specs == ["cold_chain", "tail_lift"]
+    assert result["order_context"].vehicle_specs == ["cold_chain", "tail_lift"]
 
 
 def test_estimated_lower_bound_candidate_is_committed_as_primary_vehicle():
@@ -147,7 +313,8 @@ def test_estimated_lower_bound_candidate_is_committed_as_primary_vehicle():
 
     assert result["vehicle_resolution"].vehicle_type == "truck_6m8"
     assert result["order_context"].vehicle_type == "truck_6m8"
-    assert result["order_context"].vehicle_specs == ["cold_chain"]
+    assert result["vehicle_resolution"].vehicle_specs == ["cold_chain"]
+    assert result["order_context"].vehicle_specs == []
     assert result["order_context"].vehicle_source == "estimated"
 
 

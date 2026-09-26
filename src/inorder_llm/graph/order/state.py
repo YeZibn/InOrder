@@ -18,6 +18,7 @@ class OrderGraphState(TypedDict, total=False):
     order_context: OrderContext
     order_context_updated: bool
     cargo_updated: bool
+    vehicle_estimate_inputs_changed: bool
     cargo_profile_updated: bool
     rewrite_result: RewriteResult
     entities: List[Entity]

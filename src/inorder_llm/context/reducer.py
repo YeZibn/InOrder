@@ -75,8 +75,24 @@ class OrderContextReducer:
 
     def apply(self, context: OrderContext, entities: Iterable[Entity]) -> OrderContext:
         result = deepcopy(context)
+        # Older serialized contexts may carry a canonical type without its
+        # provenance. Preserve the historical user-selection behavior once;
+        # all new writes maintain the type/source invariant explicitly.
+        if result.vehicle_type and result.vehicle_source is None:
+            result.vehicle_source = "user_matched"
+        elif not result.vehicle_type:
+            result.vehicle_source = None
         for entity in normalize_entities(entities):
-            if entity.type in ("vehicle_type", "vehicle_specs") and entity.attributes.get("normalization_accepted") is False:
+            if entity.type == "vehicle_type":
+                action = _action(entity)
+                if action == "remove":
+                    self._vehicle_type(result, entity)
+                    continue
+                if entity.attributes.get("normalization_accepted") is False:
+                    if action == "replace":
+                        self._clear_vehicle_type(result)
+                    continue
+            elif entity.type == "vehicle_specs" and entity.attributes.get("normalization_accepted") is False:
                 continue
             self._apply_one(result, entity)
         return result
@@ -99,21 +115,39 @@ class OrderContextReducer:
             # mistaken for canonical context values.
             record = find_vehicle_spec(value)
             if record is not None:
-                context.vehicle_source = "user_matched"
                 self._list(context, "vehicle_specs", record.code, entity)
+        elif entity.type == "vehicle_type":
+            self._vehicle_type(context, entity)
         elif entity.type == "remark":
             self._remark(context, entity)
         elif entity.type in _SCALAR_TYPES:
             value = _value(entity)
-            if entity.type == "vehicle_type":
-                record = find_vehicle_type(value)
-                if record is None:
-                    return
-                value = record.code
-                context.vehicle_source = "user_matched"
             self._single(context, _SCALAR_TYPES[entity.type], value, entity)
         else:
             raise ContextReductionError("unsupported entity type: " + entity.type)
+
+    def _vehicle_type(self, context: OrderContext, entity: Entity) -> None:
+        action = _action(entity)
+        if action == "remove":
+            self._clear_vehicle_type(context)
+            return
+        if action == "add":
+            raise ContextReductionError("add is not supported for scalar field: vehicle_type")
+
+        record = find_vehicle_type(_value(entity))
+        if record is None:
+            if action == "replace":
+                self._clear_vehicle_type(context)
+            return
+
+        if action in ("set", "replace"):
+            context.vehicle_type = record.code
+            context.vehicle_source = "user_matched"
+
+    @staticmethod
+    def _clear_vehicle_type(context: OrderContext) -> None:
+        context.vehicle_type = None
+        context.vehicle_source = None
 
     def _location(self, context, entity):
         role = entity.attributes.get("role")
