@@ -34,11 +34,11 @@
 
 ### Requirement: Preserve parent result compatibility
 
-MainGraph SHALL 将子图结果汇总为现有 full CLI 可消费的 `intent_result` 和 `order_result` 结构，并保留订单上下文更新状态。`intent_result` 至少包含 `main_intent`，并可包含主意图置信度（当前字段名为 `main_confidence`）；不得依赖或输出 `sub_intents`、步骤依赖等已删除字段。增加事件发布能力不得删除或重命名现有同步结果字段。
+MainGraph SHALL 将子图结果汇总为现有 full CLI 可消费的 `intent_result` 和 `order_result` 结构，并保留订单上下文更新状态；更新后的订单上下文 SHALL 仅通过 `order_result.order_context` 暴露，不得在根级结果重复输出。`intent_result` 至少包含 `main_intent`，并可包含主意图置信度（当前字段名为 `main_confidence`）；不得依赖或输出 `sub_intents`、步骤依赖等已删除字段。增加事件发布能力不得删除或重命名现有同步结果字段。
 
 #### Scenario: Order result compatibility
 - **WHEN** order 子图完成
-- **THEN** 父图结果包含 intent_result、order_result 及可继续保存的更新后 OrderContext，并可由 SSE 适配层作为最终业务结果使用
+- **THEN** 父图结果包含 `intent_result` 和 `order_result`，更新后的 `OrderContext` 仅位于 `order_result.order_context`，并可由 SSE 适配层作为最终业务结果使用
 
 #### Scenario: Main-only intent result
 - **WHEN** 意图子图完成
@@ -47,6 +47,20 @@ MainGraph SHALL 将子图结果汇总为现有 full CLI 可消费的 `intent_res
 #### Scenario: Child graph failure
 - **WHEN** 任一子图抛出结构化错误
 - **THEN** MainGraph 向同步调用方暴露该错误，不返回部分成功的订单结果；SSE 适配层将其转换为 `ERROR` 事件
+
+### Requirement: Expose one order context in the finalized parent result
+
+MainGraph SHALL 在父图内部保留完成子图编排所需的工作状态；对调用方返回的完整订单结果 SHALL 只在 `order_result.order_context` 暴露更新后的订单上下文，不得再提供根级重复的 `order_context`。QA 等未执行订单子图的路径 SHALL 不生成订单结果或订单上下文。
+
+#### Scenario: Return one context after the order route
+
+- **WHEN** MainGraph 路由到订单子图并成功完成
+- **THEN** 完整结果在 `order_result.order_context` 提供最终上下文，且根级结果不包含第二份 `order_context`
+
+#### Scenario: Do not return order context on the QA route
+
+- **WHEN** MainGraph 将请求路由到 QA 终止分支
+- **THEN** 结果不包含订单子图结果或订单上下文
 
 ### Requirement: Publish parent workflow lifecycle
 

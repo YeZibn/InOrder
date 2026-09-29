@@ -10,7 +10,7 @@ from ..intent.graph import build_intent_graph
 from ..order.graph import build_order_processing_graph
 from ...extract.langextract_adapter import LangExtractEntityExtractor
 from .routing import route_main_graph
-from .state import MainGraphState
+from .state import MainGraphOutput, MainGraphState
 
 
 def _as_dict(value: Any) -> dict:
@@ -28,7 +28,7 @@ class MainGraph(BaseGraph[MainGraphState]):
         self.executor = executor
 
     def build(self):
-        builder = StateGraph(MainGraphState)
+        builder = StateGraph(MainGraphState, output_schema=MainGraphOutput)
         builder.add_node("intent_subgraph", self.intent_graph)
         builder.add_node("order_subgraph", self.order_graph)
         builder.add_node("mark_order_entered", dual_node(self._mark_order_entered, self.executor))
@@ -80,11 +80,14 @@ class MainGraph(BaseGraph[MainGraphState]):
                 "extract_executed": True,
                 "entity_count": len(state.get("entities", ())),
             })
-        result = dict(state)
-        result["intent_result"] = intent_data
+        result = {
+            "intent_result": intent_data,
+            "order_graph_entered": bool(state.get("order_graph_entered")),
+        }
         if state.get("order_graph_entered"):
             result["order_result"] = order_data
-        result.setdefault("order_graph_entered", False)
+        elif state.get("qa_placeholder"):
+            result["qa_placeholder"] = state["qa_placeholder"]
         return result
 
 

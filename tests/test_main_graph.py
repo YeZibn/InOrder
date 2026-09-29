@@ -46,9 +46,11 @@ def test_parent_routes_qa_without_order_subgraph():
     rewrite, extract = Rewrite(), Extract()
     graph = build_main_graph(build_intent_graph(intent), build_order_processing_graph(rewrite, extract))
     result = graph.invoke(state())
-    assert result["main_intent"] == "qa"
+    assert result["intent_result"]["main_intent"] == "qa"
     assert result["order_graph_entered"] is False
-    assert result["order_result"] if "order_result" in result else True
+    assert "order_result" not in result
+    assert "order_context" not in result
+    assert "main_intent" not in result
     assert rewrite.calls == []
     assert extract.calls == []
     assert result["intent_result"]["main_intent"] == "qa"
@@ -59,8 +61,10 @@ def test_parent_routes_order_and_passes_context_to_child():
     rewrite, extract = Rewrite(), Extract()
     graph = build_main_graph(build_intent_graph(intent), build_order_processing_graph(rewrite, extract))
     result = graph.invoke({**state(), "message": "我要运货"})
-    assert result["main_intent"] == "order"
+    assert result["intent_result"]["main_intent"] == "order"
     assert result["order_graph_entered"] is True
+    assert "order_context" not in result
+    assert "entities" not in result
     assert result["order_result"]["rewrite_result"].extraction_text == "新增一吨苹果"
     assert rewrite.calls[0][0] == "我要运货"
     assert rewrite.calls[0][1] is not None

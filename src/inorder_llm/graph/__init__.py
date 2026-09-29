@@ -2,7 +2,7 @@
 
 from .base import BaseGraph, BaseNode
 from .order import OrderGraphState, OrderProcessingGraph, build_order_processing_graph
-from .main import MainGraph, MainGraphState, build_main_graph, build_main_graph_from_models
+from .main import MainGraph, MainGraphOutput, MainGraphState, build_main_graph, build_main_graph_from_models
 
 __all__ = [
     "BaseGraph",
@@ -12,6 +12,7 @@ __all__ = [
     "build_order_processing_graph",
     "MainGraph",
     "MainGraphState",
+    "MainGraphOutput",
     "build_main_graph",
     "build_main_graph_from_models",
 ]

@@ -4,8 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping
 
 from ..extract.models import Entity
-from ..catalog import find_vehicle_spec, find_vehicle_type
-from ..normalization import normalize_entities
+from ..catalog import get_vehicle_spec, get_vehicle_type
 from .models import OrderContext
 
 
@@ -71,7 +70,12 @@ def _cargo_record(name: Any, attrs: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 class OrderContextReducer:
-    """Pure reducer: returns a copied context and never calls external services."""
+    """Apply normalized entity actions to a copied order context.
+
+    Callers must normalize the current-turn entity list before calling
+    ``apply``. This reducer only applies actions; it never interprets raw
+    aliases or invokes entity normalizers.
+    """
 
     def apply(self, context: OrderContext, entities: Iterable[Entity]) -> OrderContext:
         result = deepcopy(context)
@@ -82,7 +86,7 @@ class OrderContextReducer:
             result.vehicle_source = "user_matched"
         elif not result.vehicle_type:
             result.vehicle_source = None
-        for entity in normalize_entities(entities):
+        for entity in entities:
             if entity.type == "vehicle_type":
                 action = _action(entity)
                 if action == "remove":
@@ -110,10 +114,9 @@ class OrderContextReducer:
             self._cargo(context, entity)
         elif entity.type == "vehicle_specs":
             value = _value(entity)
-            # Extract now preserves source expressions.  Until the dedicated
-            # vehicle normalizer runs, unresolved expressions must not be
-            # mistaken for canonical context values.
-            record = find_vehicle_spec(value)
+            # This exact-code lookup validates canonical output only. Alias
+            # and fuzzy matching belong to the entity-normalization boundary.
+            record = get_vehicle_spec(value)
             if record is not None:
                 self._list(context, "vehicle_specs", record.code, entity)
         elif entity.type == "vehicle_type":
@@ -134,7 +137,10 @@ class OrderContextReducer:
         if action == "add":
             raise ContextReductionError("add is not supported for scalar field: vehicle_type")
 
-        record = find_vehicle_type(_value(entity))
+        # The normalizer has already matched aliases/fuzzy expressions and
+        # placed a canonical code here. This lookup accepts canonical codes
+        # only, so action reduction cannot repeat matching.
+        record = get_vehicle_type(_value(entity))
         if record is None:
             if action == "replace":
                 self._clear_vehicle_type(context)

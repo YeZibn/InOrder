@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
 
-@dataclass(frozen=True)
+@dataclass
 class NormalizationError(ValueError):
     """Raised when an enum value cannot be normalized safely."""
 

@@ -1,5 +1,6 @@
 import pytest
 
+from inorder_llm.normalization import normalize_entities
 from inorder_llm.context import ContextReductionError, OrderContext, OrderContextReducer
 from inorder_llm.extract import Entity
 from inorder_llm.normalization import TimeNormalizationError, normalize_time_entity
@@ -52,7 +53,7 @@ def test_reducer_accepts_time_without_context():
     reducer = OrderContextReducer()
     updated = reducer.apply(
         OrderContext(),
-        [_time({"start": "2026-08-16 12:00", "end": "2026-08-16 12:00"})],
+        normalize_entities([_time({"start": "2026-08-16 12:00", "end": "2026-08-16 12:00"})]),
     )
     assert updated.delivery_time["kind"] == "fixed"
     assert "context" not in updated.delivery_time

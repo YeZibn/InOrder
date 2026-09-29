@@ -1,5 +1,6 @@
 import pytest
 
+from inorder_llm.normalization import normalize_entities
 from inorder_llm.context import OrderContext, OrderContextReducer
 from inorder_llm.extract import Entity
 from inorder_llm.normalization import NormalizationError, normalize_entities, normalize_entity
@@ -66,14 +67,14 @@ def test_non_enum_entities_pass_through_and_batch_is_pure():
     assert result[0] is entity
 
 
-def test_reducer_normalizes_enum_before_writing_context():
+def test_reducer_applies_explicitly_normalized_enum_values():
     context = OrderContext()
     updated = OrderContextReducer().apply(
         context,
-        [
+        normalize_entities([
             Entity("payment_type", "set", {"value": "提前付款"}, "提前付款"),
             Entity("service_type", "set", {"value": "快车"}, "快车"),
-        ],
+        ]),
     )
     assert updated.payment_type == 1
     assert updated.service_type == "express"

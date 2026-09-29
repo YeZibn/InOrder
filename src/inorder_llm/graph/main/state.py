@@ -7,6 +7,14 @@ from ...intent.models import IntentPlan
 
 
 class MainGraphState(TypedDict, total=False):
+    """Internal parent-graph workspace.
+
+    ``order_context`` is the one working snapshot passed into the order child;
+    the finalized public result projects it only through ``order_result``.
+    Intent, order-child outputs, and routing flags are per-run results or
+    control metadata, not additional persisted order state.
+    """
+
     message: str
     history: HistoryConversation
     order_context: OrderContext
@@ -32,4 +40,13 @@ class MainGraphState(TypedDict, total=False):
     qa_placeholder: Optional[str]
 
 
-__all__ = ["MainGraphState"]
+class MainGraphOutput(TypedDict, total=False):
+    """Caller-facing projection; internal working context is intentionally absent."""
+
+    intent_result: Dict[str, Any]
+    order_result: Dict[str, Any]
+    order_graph_entered: bool
+    qa_placeholder: Optional[str]
+
+
+__all__ = ["MainGraphState", "MainGraphOutput"]

@@ -2,6 +2,12 @@ from copy import deepcopy
 
 import pytest
 
+from inorder_llm.normalization import (
+    NormalizationError,
+    PhoneNormalizationError,
+    TimeNormalizationError,
+    normalize_entities,
+)
 from inorder_llm.context import ContextReductionError, OrderContextReducer
 from inorder_llm.cargo_profile import parse_cargo_profile_from_text
 from inorder_llm.context.models import HistoryConversation, OrderContext
@@ -163,6 +169,9 @@ def test_unmatched_vehicle_falls_back_to_estimation():
     assert result["vehicle_resolution"].candidates[0]["fit_level"] == "upper_bound_only"
     assert estimator.calls[0][2] == "大车"
     assert estimator.calls[0][4] == ["cold_chain"]
+    assert result["entities"][0].attributes["raw"] == "大车"
+    assert result["entities"][0].attributes["normalization_accepted"] is False
+    assert result["entities"][0].action == "replace"
     assert result["order_context"].vehicle_type is None
     assert result["order_context"].vehicle_specs == ["cold_chain"]
     assert result["order_context"].vehicle_source is None
@@ -326,8 +335,59 @@ def test_ambiguous_rewrite_still_calls_extractor():
 
     result = build_order_processing_graph(rewrite, extractor).invoke(_state())
 
-    assert result["entities"] == extractor.entities
+    assert result["entities"][0].attributes["value"] == "truck_4m2"
+    assert result["entities"][0].attributes["raw"] == "4米2"
+    assert result["entities"][0].attributes["normalization_accepted"] is True
+    assert result["entities"][0].action == extractor.entities[0].action
     assert extractor.calls[0][0] == "设置当前车型"
+
+
+def test_entity_normalization_is_run_once_before_reduction(monkeypatch):
+    from inorder_llm.graph.order import nodes
+
+    calls = []
+    real_normalize = nodes.normalize_entities
+
+    def tracked_normalize(entities):
+        calls.append(list(entities))
+        return real_normalize(entities)
+
+    monkeypatch.setattr(nodes, "normalize_entities", tracked_normalize)
+    rewrite = FakeRewriteModel(RewriteResult("使用货到付款", "使用货到付款"))
+    extractor = FakeExtractor([Entity("payment_type", "set", {"value": "货到付款"}, "货到付款")])
+
+    result = build_order_processing_graph(rewrite, extractor).invoke(_state())
+
+    assert len(calls) == 1
+    assert result["order_context"].payment_type == 0
+    assert result["entities"][0].attributes["raw"] == "货到付款"
+    assert result["entities"][0].attributes["value"] == 0
+
+
+@pytest.mark.parametrize(
+    ("invalid_entity", "error_type"),
+    [
+        (Entity("time", "set", {"start": "bad-time", "end": None}, "明天"), TimeNormalizationError),
+        (Entity("phone", "set", {"role": "sender"}, "12345"), PhoneNormalizationError),
+        (Entity("payment_type", "set", {"value": "月结"}, "月结"), NormalizationError),
+    ],
+)
+def test_strict_normalization_fails_before_any_context_action(invalid_entity, error_type):
+    original = OrderContext(cargo=[{
+        "name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": [],
+    }])
+    rewrite = FakeRewriteModel(RewriteResult("增加香蕉并设置字段", "增加香蕉并设置字段"))
+    extractor = FakeExtractor([
+        Entity("cargo", "add", {"name": "香蕉", "weight": "500公斤"}, "500公斤香蕉"),
+        invalid_entity,
+    ])
+
+    with pytest.raises(error_type):
+        build_order_processing_graph(rewrite, extractor).invoke(_state(context=original))
+
+    assert original.cargo == [{
+        "name": "苹果", "weight": ["1吨"], "quantity": [], "volume": [], "dimensions": [],
+    }]
 
 
 def test_graph_preserves_history_and_order_context():
@@ -475,11 +535,11 @@ def test_graph_repeated_cargo_additions_preserve_raw_expressions():
 def test_graph_supports_set_replace_and_remove_context_actions():
     reducer = OrderContextReducer()
     context = OrderContext()
-    context = reducer.apply(context, [Entity("location", "set", {"role": "pickup", "city": "上海"})])
-    context = reducer.apply(context, [Entity("location", "replace", {"role": "pickup", "city": "杭州"})])
-    context = reducer.apply(context, [Entity("vehicle_specs", "set", {"extraction_text": "高顶"})])
-    context = reducer.apply(context, [Entity("vehicle_specs", "remove", {"extraction_text": "高顶"})])
-    context = reducer.apply(context, [Entity("location", "remove", {"role": "pickup"})])
+    context = reducer.apply(context, normalize_entities([Entity("location", "set", {"role": "pickup", "city": "上海"})]))
+    context = reducer.apply(context, normalize_entities([Entity("location", "replace", {"role": "pickup", "city": "杭州"})]))
+    context = reducer.apply(context, normalize_entities([Entity("vehicle_specs", "set", {"extraction_text": "高顶"})]))
+    context = reducer.apply(context, normalize_entities([Entity("vehicle_specs", "remove", {"extraction_text": "高顶"})]))
+    context = reducer.apply(context, normalize_entities([Entity("location", "remove", {"role": "pickup"})]))
     assert context.pickup_location is None
     assert context.vehicle_specs == []
 
@@ -488,7 +548,7 @@ def test_unresolved_vehicle_source_is_not_written_as_canonical_context_value():
     context = OrderContext()
     context = OrderContextReducer().apply(
         context,
-        [Entity("vehicle_type", "set", {"value": "小车"}, "小车")],
+        normalize_entities([Entity("vehicle_type", "set", {"value": "小车"}, "小车")]),
     )
     assert context.vehicle_type is None
 
@@ -496,7 +556,7 @@ def test_unresolved_vehicle_source_is_not_written_as_canonical_context_value():
 def test_resolved_catalog_vehicle_value_can_update_context():
     context = OrderContextReducer().apply(
         OrderContext(),
-        [Entity("vehicle_type", "set", {"value": "truck_4m2"}, "4米2")],
+        normalize_entities([Entity("vehicle_type", "set", {"value": "truck_4m2"}, "4米2")]),
     )
     assert context.vehicle_type == "truck_4m2"
 
@@ -504,7 +564,7 @@ def test_resolved_catalog_vehicle_value_can_update_context():
 def test_vehicle_alias_is_canonicalized_only_at_context_boundary():
     context = OrderContextReducer().apply(
         OrderContext(),
-        [Entity("vehicle_type", "set", {"value": "4米2"}, "4米2"), Entity("vehicle_specs", "set", {"value": "冷链"}, "冷链")],
+        normalize_entities([Entity("vehicle_type", "set", {"value": "4米2"}, "4米2"), Entity("vehicle_specs", "set", {"value": "冷链"}, "冷链")]),
     )
     assert context.vehicle_type == "truck_4m2"
     assert context.vehicle_specs == ["cold_chain"]

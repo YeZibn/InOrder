@@ -19,8 +19,8 @@ def intent_view(result):
 
 
 def order_summary_view(result) -> Dict[str, Any] | None:
-    """Order summary view from either the nested ``order_result`` or top level."""
-    source = result.get("order_result") or result
+    """Read the order summary only from the public ``order_result`` boundary."""
+    source = result.get("order_result") if isinstance(result, dict) else None
     summary = to_data(source.get("order_summary")) if isinstance(source, dict) else None
     return summary if isinstance(summary, dict) and (summary.get("user_message") or summary.get("summary")) else None
 

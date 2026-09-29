@@ -1,3 +1,4 @@
+from inorder_llm.normalization import normalize_entities
 from inorder_llm.context import (ConversationSession, HistoryConversation, OrderContext,
                                  OrderContextReducer)
 from inorder_llm.context.summary import summarize_assistant, to_data
@@ -46,17 +47,17 @@ def test_order_context_serializes_derived_profiles_without_changing_raw_cargo():
 def test_reducer_scalar_replace_and_remove_is_pure():
     original = OrderContext()
     reducer = OrderContextReducer()
-    updated = reducer.apply(original, [Entity("location", "set", {"role": "pickup", "city": "上海"}), Entity("location", "replace", {"role": "pickup", "city": "杭州"})])
+    updated = reducer.apply(original, normalize_entities([Entity("location", "set", {"role": "pickup", "city": "上海"}), Entity("location", "replace", {"role": "pickup", "city": "杭州"})]))
     assert updated.pickup_location["city"] == "杭州"
     assert original.pickup_location is None
-    cleared = reducer.apply(updated, [Entity("location", "remove", {"role": "pickup", "city": "杭州"})])
+    cleared = reducer.apply(updated, normalize_entities([Entity("location", "remove", {"role": "pickup", "city": "杭州"})]))
     assert cleared.pickup_location is None
 
 
 def test_reducer_preserves_location_city_and_full_address():
     context = OrderContextReducer().apply(
         OrderContext(),
-        [
+        normalize_entities([
             Entity(
                 "location",
                 "set",
@@ -77,7 +78,7 @@ def test_reducer_preserves_location_city_and_full_address():
                     "full_address": "温州瓯海批发市场",
                 },
             ),
-        ],
+        ]),
     )
     assert context.pickup_location == {
         "role": "pickup",
@@ -99,7 +100,7 @@ def test_vehicle_specs_updates_do_not_change_vehicle_source():
 
     updated = reducer.apply(
         context,
-        [Entity("vehicle_specs", "set", {"value": "冷链"}, "冷链")],
+        normalize_entities([Entity("vehicle_specs", "set", {"value": "冷链"}, "冷链")]),
     )
 
     assert updated.vehicle_type == "truck_5m2"
@@ -112,7 +113,7 @@ def test_matched_vehicle_type_replaces_estimated_vehicle_and_source():
 
     updated = OrderContextReducer().apply(
         context,
-        [Entity("vehicle_type", "replace", {"value": "9米6"}, "换成9米6")],
+        normalize_entities([Entity("vehicle_type", "replace", {"value": "9米6"}, "换成9米6")]),
     )
 
     assert updated.vehicle_type == "truck_9m6"
@@ -124,7 +125,7 @@ def test_unmatched_explicit_vehicle_replace_clears_previous_selection():
 
     updated = OrderContextReducer().apply(
         context,
-        [Entity("vehicle_type", "replace", {"value": "大车"}, "换成大车")],
+        normalize_entities([Entity("vehicle_type", "replace", {"value": "大车"}, "换成大车")]),
     )
 
     assert updated.vehicle_type is None
@@ -137,7 +138,7 @@ def test_unmatched_nonreplacement_vehicle_expression_preserves_context():
 
     updated = OrderContextReducer().apply(
         context,
-        [Entity("vehicle_type", "set", {"value": "大车"}, "大车合适吗")],
+        normalize_entities([Entity("vehicle_type", "set", {"value": "大车"}, "大车合适吗")]),
     )
 
     assert updated.vehicle_type == "truck_4m2"
@@ -149,12 +150,12 @@ def test_vehicle_remove_clears_type_and_source_even_if_expression_is_unmatched()
 
     updated = OrderContextReducer().apply(
         context,
-        [Entity(
+        normalize_entities([Entity(
             "vehicle_type",
             "remove",
             {"value": "未识别车型", "normalization_accepted": False},
             "车型不限",
-        )],
+        )]),
     )
 
     assert updated.vehicle_type is None
@@ -164,7 +165,7 @@ def test_vehicle_remove_clears_type_and_source_even_if_expression_is_unmatched()
 def test_legacy_vehicle_without_source_is_normalized_as_user_matched():
     context = OrderContext(vehicle_type="truck_4m2")
 
-    updated = OrderContextReducer().apply(context, [])
+    updated = OrderContextReducer().apply(context, normalize_entities([]))
 
     assert updated.vehicle_type == "truck_4m2"
     assert updated.vehicle_source == "user_matched"
@@ -173,8 +174,8 @@ def test_legacy_vehicle_without_source_is_normalized_as_user_matched():
 
 def test_reducer_cargo_add_and_remove():
     reducer = OrderContextReducer()
-    first = reducer.apply(OrderContext(), [Entity("cargo", "set", {"name": "苹果", "weight": "2吨"})])
-    second = reducer.apply(first, [Entity("cargo", "add", {"name": "苹果", "weight": "1吨"})])
+    first = reducer.apply(OrderContext(), normalize_entities([Entity("cargo", "set", {"name": "苹果", "weight": "2吨"})]))
+    second = reducer.apply(first, normalize_entities([Entity("cargo", "add", {"name": "苹果", "weight": "1吨"})]))
     assert second.cargo == [{
         "name": "苹果",
         "weight": ["2吨", "1吨"],
@@ -182,7 +183,7 @@ def test_reducer_cargo_add_and_remove():
         "volume": [],
         "dimensions": [],
     }]
-    removed = reducer.apply(second, [Entity("cargo", "remove", {"name": "苹果"})])
+    removed = reducer.apply(second, normalize_entities([Entity("cargo", "remove", {"name": "苹果"})]))
     assert removed.cargo == []
 
 
@@ -190,17 +191,17 @@ def test_reducer_cargo_replace_replaces_raw_lists():
     reducer = OrderContextReducer()
     context = reducer.apply(
         OrderContext(),
-        [Entity("cargo", "set", {
+        normalize_entities([Entity("cargo", "set", {
             "name": "香蕉",
             "weight": "1吨",
             "quantity": "20箱",
             "volume": "5立方",
             "dimensions": "2米×1米×1米",
-        })],
+        })]),
     )
     replaced = reducer.apply(
         context,
-        [Entity("cargo", "replace", {"name": "香蕉", "weight": "500公斤"})],
+        normalize_entities([Entity("cargo", "replace", {"name": "香蕉", "weight": "500公斤"})]),
     )
     assert replaced.cargo == [{
         "name": "香蕉",
@@ -215,13 +216,13 @@ def test_reducer_cargo_ignores_null_and_empty_attributes():
     reducer = OrderContextReducer()
     context = reducer.apply(
         OrderContext(),
-        [Entity("cargo", "set", {
+        normalize_entities([Entity("cargo", "set", {
             "name": "苹果",
             "weight": None,
             "quantity": "",
             "volume": [],
             "dimensions": " ",
-        })],
+        })]),
     )
     assert context.cargo == [{
         "name": "苹果",
@@ -236,7 +237,7 @@ def test_reducer_cargo_migrates_legacy_scalar_record_on_cargo_action():
     legacy = OrderContext(cargo=[{"name": "苹果", "weight": "1吨"}])
     updated = OrderContextReducer().apply(
         legacy,
-        [Entity("cargo", "add", {"name": "香蕉", "weight": "500公斤"})],
+        normalize_entities([Entity("cargo", "add", {"name": "香蕉", "weight": "500公斤"})]),
     )
     assert updated.cargo == [
         {
@@ -303,7 +304,9 @@ def test_summarize_assistant_prefers_order_summary_from_dataclass():
 def test_summarize_assistant_reads_nested_order_result():
     result = {
         "intent_result": {"main_intent": "order"},
-        "order_summary": {"user_message": "", "summary": "已识别运输路线。", "status": "incomplete"},
+        "order_result": {
+            "order_summary": {"user_message": "", "summary": "已识别运输路线。", "status": "incomplete"},
+        },
     }
     text, metadata = summarize_assistant(result)
     assert text == "已识别运输路线。"
@@ -326,10 +329,10 @@ def test_summarize_assistant_bottom_fallback_without_extractable_content():
 
 def test_reducer_list_and_remark_actions():
     reducer = OrderContextReducer()
-    context = reducer.apply(OrderContext(), [Entity("vehicle_specs", "set", {"extraction_text": "高顶"}), Entity("remark", "set", {"value": "易碎轻放"})])
-    context = reducer.apply(context, [Entity("vehicle_specs", "add", {"extraction_text": "带尾板"}), Entity("remark", "add", {"value": "装货地电联"})])
+    context = reducer.apply(OrderContext(), normalize_entities([Entity("vehicle_specs", "set", {"extraction_text": "高顶"}), Entity("remark", "set", {"value": "易碎轻放"})]))
+    context = reducer.apply(context, normalize_entities([Entity("vehicle_specs", "add", {"extraction_text": "带尾板"}), Entity("remark", "add", {"value": "装货地电联"})]))
     assert context.vehicle_specs == ["high_roof", "tail_lift"]
     assert context.remark == "易碎轻放;装货地电联"
-    context = reducer.apply(context, [Entity("vehicle_specs", "replace", {"extraction_text": "封闭式"}), Entity("remark", "replace", {"value": "新备注"})])
+    context = reducer.apply(context, normalize_entities([Entity("vehicle_specs", "replace", {"extraction_text": "封闭式"}), Entity("remark", "replace", {"value": "新备注"})]))
     assert context.vehicle_specs == ["enclosed"]
     assert context.remark == "新备注"

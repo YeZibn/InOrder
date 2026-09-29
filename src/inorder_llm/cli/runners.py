@@ -25,6 +25,18 @@ class IntentChainRunner:
         return self.graph.invoke({"message": message})
 
 
+def _order_result_with_metadata(raw_result: dict) -> dict:
+    result = dict(raw_result)
+    result.setdefault("order_graph_entered", True)
+    result.setdefault("rewrite_completed", result.get("rewrite_result") is not None)
+    result.setdefault("extract_executed", True)
+    result.setdefault("entity_count", len(result.get("entities", ())))
+    result.setdefault("order_context_updated", bool(result.get("order_context_updated")))
+    result.setdefault("cargo_profile_updated", bool(result.get("cargo_profile_updated")))
+    result.setdefault("vehicle_resolution_completed", result.get("vehicle_resolution") is not None)
+    return result
+
+
 class OrderChainRunner:
     def __init__(self, graph: GraphLike):
         self.graph = graph
@@ -38,20 +50,7 @@ class OrderChainRunner:
                 "reference_time": context.reference_time,
             }
         )
-        result = dict(raw_result)
-        rewrite_result = result.get("rewrite_result")
-        result.update(
-            {
-                "order_graph_entered": True,
-                "rewrite_completed": rewrite_result is not None,
-                "extract_executed": True,
-                "entity_count": len(result.get("entities", ())),
-                "order_context_updated": bool(result.get("order_context_updated")),
-                "cargo_profile_updated": bool(result.get("cargo_profile_updated")),
-                "vehicle_resolution_completed": result.get("vehicle_resolution") is not None,
-            }
-        )
-        return result
+        return {"order_result": _order_result_with_metadata(raw_result)}
 
 
 class FullChainRunner:
@@ -65,16 +64,10 @@ class FullChainRunner:
             "order_context": context.order_context,
             "reference_time": context.reference_time,
         }))
+        result.pop("order_context", None)
         order_result = result.get("order_result")
         if order_result is not None:
-            order_result = dict(order_result)
-            order_result.setdefault("order_graph_entered", True)
-            order_result.setdefault("rewrite_completed", order_result.get("rewrite_result") is not None)
-            order_result.setdefault("extract_executed", True)
-            order_result.setdefault("entity_count", len(order_result.get("entities", ())))
-            order_result.setdefault("order_context_updated", bool(order_result.get("order_context_updated")))
-            order_result.setdefault("cargo_profile_updated", bool(order_result.get("cargo_profile_updated")))
-            result["order_result"] = order_result
+            result["order_result"] = _order_result_with_metadata(order_result)
         result["intent_result"] = result.get("intent_result", {})
         return result
 

@@ -44,6 +44,11 @@ _data = to_data
 _intent_data = intent_view
 
 
+def _order_result(result):
+    value = result.get("order_result") if isinstance(result, dict) else None
+    return value if isinstance(value, dict) else {}
+
+
 def _vehicle_candidate_lines(result) -> List[str]:
     resolution = _data(result.get("vehicle_resolution"))
     if not isinstance(resolution, dict):
@@ -81,7 +86,7 @@ def _assistant_summary(result, chain: str, mode: Optional[str] = None):
                 text = order_summary.get("user_message") or order_summary.get("summary", "订单已解析")
                 metadata = {"chain": "full", "main_intent": intent, "order_status": status}
                 return text, metadata
-            summary, metadata = _assistant_summary(order_result, "order")
+            summary, metadata = _assistant_summary({"order_result": order_result}, "order")
             intent = _intent_data(intent_result).get("main_intent")
             metadata.update({"chain": "full", "main_intent": intent})
             return (f"主意图：{intent}；" + summary), metadata
@@ -92,12 +97,13 @@ def _assistant_summary(result, chain: str, mode: Optional[str] = None):
             text += "；问答入口尚未实现"
         return text, {"chain": "full", "main_intent": intent}
     if chain == "order":
-        order_summary = _data(result.get("order_summary"))
+        order_result = _order_result(result)
+        order_summary = _data(order_result.get("order_summary"))
         if isinstance(order_summary, dict):
             text = order_summary.get("user_message") or order_summary.get("summary", "订单已解析")
             return text, {"chain": "order", "order_status": order_summary.get("status", "incomplete")}
-        count = result.get("entity_count", len(result.get("entities", [])))
-        updated = bool(result.get("order_context_updated"))
+        count = order_result.get("entity_count", len(order_result.get("entities", [])))
+        updated = bool(order_result.get("order_context_updated"))
         return f"订单解析完成；Extract 提取 {count} 个实体；订单上下文" + ("已更新。" if updated else "未更新。"), {
             "chain": "order", "entity_count": count,
             "order_context_updated": updated,
@@ -112,22 +118,23 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
     if isinstance(result, str): return result
     if chain == "qa": return "问答入口尚未实现（当前仅支持意图识别）。"
     if chain == "order":
-        order_summary = _data(result.get("order_summary"))
+        order_result = _order_result(result)
+        order_summary = _data(order_result.get("order_summary"))
         if isinstance(order_summary, dict):
             text = str(order_summary.get("user_message") or order_summary.get("summary", "订单已解析"))
-            candidate_lines = _vehicle_candidate_lines(result)
+            candidate_lines = _vehicle_candidate_lines(order_result)
             return "\n".join([text, *candidate_lines]) if candidate_lines else text
-        rewrite = _data(result.get("rewrite_result"))
+        rewrite = _data(order_result.get("rewrite_result"))
         lines = ["链路：order（仅解析，未执行业务）"]
-        lines.append("订单处理：" + ("已进入" if result.get("order_graph_entered") else "未进入"))
-        lines.append("Rewrite：" + ("已完成" if result.get("rewrite_completed") else "未完成"))
+        lines.append("订单处理：" + ("已进入" if order_result.get("order_graph_entered") else "未进入"))
+        lines.append("Rewrite：" + ("已完成" if order_result.get("rewrite_completed") else "未完成"))
         if rewrite: lines.append("Rewrite：" + str(rewrite.get("rewritten_text", "")))
-        lines.append("Extract：" + ("已执行" if result.get("extract_executed") else "未执行"))
-        lines.append("实体数量：" + str(result.get("entity_count", len(result.get("entities", [])))))
-        lines.append("订单上下文：" + ("已更新" if result.get("order_context_updated") else "未更新"))
-        if result.get("cargo_profile_updated"):
+        lines.append("Extract：" + ("已执行" if order_result.get("extract_executed") else "未执行"))
+        lines.append("实体数量：" + str(order_result.get("entity_count", len(order_result.get("entities", [])))))
+        lines.append("订单上下文：" + ("已更新" if order_result.get("order_context_updated") else "未更新"))
+        if order_result.get("cargo_profile_updated"):
             lines.append("货物画像：已重建")
-        resolution = _data(result.get("vehicle_resolution"))
+        resolution = _data(order_result.get("vehicle_resolution"))
         if resolution:
             lines.append("车型：" + str(resolution.get("vehicle_type", "")))
             if resolution.get("vehicle_specs"):
@@ -135,8 +142,8 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
             lines.append("车型来源：" + str(resolution.get("source", "")))
             if resolution.get("reason"):
                 lines.append("车型原因：" + str(resolution["reason"]))
-            lines.extend(_vehicle_candidate_lines(result))
-        for entity in result.get("entities", []):
+            lines.extend(_vehicle_candidate_lines(order_result))
+        for entity in order_result.get("entities", []):
             item = _data(entity)
             lines.append("Entity：" + json.dumps(item, ensure_ascii=False))
         return "\n".join(lines)
@@ -145,7 +152,7 @@ def format_result(result, chain: str = "intent", mode: Optional[str] = None) -> 
         text = ["链路：full"]
         text.append(format_result(intent_result, "intent", mode))
         if result.get("order_result"):
-            text.append(format_result(result["order_result"], "order"))
+            text.append(format_result({"order_result": result["order_result"]}, "order"))
         elif result.get("qa_placeholder"):
             text.append(result["qa_placeholder"])
         elif result.get("order_graph_entered") is False:
@@ -231,7 +238,8 @@ class IntentCli:
             return "当前 " + self.session.chain + " 链路未配置，无法处理。"
         result = runner.run(recovery.message, context)
         if self.session.chain == "order":
-            updated_context = result.get("order_context")
+            order_result = result.get("order_result")
+            updated_context = order_result.get("order_context") if isinstance(order_result, dict) else None
             if updated_context is not None:
                 if not updated_context.reference_time:
                     updated_context = deepcopy(updated_context)

@@ -35,6 +35,7 @@ class StreamingGraph(FakeGraph):
         yield {"order_subgraph": {"rewrite_result": {"rewritten_text": "x"}}}
         yield {"rewrite": {"rewrite_result": {"rewritten_text": "x"}}}
         yield {"extract": {"entities": []}}
+        yield {"normalize_entities": {"entities": []}}
         yield {"update_context": {"order_context_updated": True}}
         yield {"cargo_profile": {"cargo_profile_updated": True}}
         yield {"vehicle_resolution": {"vehicle_resolution": {"vehicle_type": "厢式"}}}
@@ -48,6 +49,7 @@ class NestedStreamingGraph(FakeGraph):
             (("intent_subgraph:run",), {"main_intent": {"main_intent": "order"}}),
             (("order_subgraph:run",), {"rewrite": {"rewrite_result": {"rewritten_text": "x"}}}),
             (("order_subgraph:run",), {"extract": {"entities": []}}),
+            (("order_subgraph:run",), {"normalize_entities": {"entities": []}}),
             (("order_subgraph:run",), {"update_context": {"order_context_updated": True}}),
             (("order_subgraph:run",), {"cargo_profile": {"cargo_profile_updated": True}}),
             (("order_subgraph:run",), {"vehicle_resolution": {"vehicle_resolution": {"vehicle_type": "厢式"}}}),
@@ -102,6 +104,24 @@ def test_adapter_order_emits_context_only_when_updated():
     kinds = [event.type for event in events]
     assert EventType.CREATE_ORDER_CONTEXT in kinds
     assert kinds[-2:] == [EventType.THINKING_DONE, EventType.DONE]
+    done = events[-1].to_dict()["payload"]["result"]
+    assert "order_context" not in done
+    assert done["order_result"]["order_context"]["cargo"] == context.cargo
+
+
+def test_adapter_never_reads_or_returns_root_order_context():
+    context = OrderContext(cargo=[{"name": "苹果"}])
+    result = {
+        "intent_result": {"main_intent": "order"},
+        "order_graph_entered": True,
+        "order_context": context,
+        "order_context_updated": True,
+    }
+
+    events = list(WorkflowEventAdapter(FakeGraph(result)).events({"session_id": "s"}))
+
+    assert all(event.type != EventType.CREATE_ORDER_CONTEXT for event in events)
+    assert "order_context" not in events[-1].to_dict()["payload"]["result"]
 
 
 def test_done_event_includes_order_summary_without_raw_dataclass_leak():

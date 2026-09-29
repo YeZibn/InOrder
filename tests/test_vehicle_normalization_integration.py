@@ -1,3 +1,4 @@
+from inorder_llm.normalization import normalize_entities
 from inorder_llm.context import OrderContext, OrderContextReducer
 from inorder_llm.extract import Entity
 from inorder_llm.normalization import normalize_vehicle_entity
@@ -18,7 +19,7 @@ def test_ensemble_accepts_high_confidence_variant():
 
 def test_unmatched_vehicle_replacement_clears_context_vehicle():
     context = OrderContext(vehicle_type="truck_5m2")
-    updated = OrderContextReducer().apply(context, [Entity("vehicle_type", "replace", {"value": "4米以上"}, "4米以上")])
+    updated = OrderContextReducer().apply(context, normalize_entities([Entity("vehicle_type", "replace", {"value": "4米以上"}, "4米以上")]))
     assert updated.vehicle_type is None
     assert updated.vehicle_source is None
 

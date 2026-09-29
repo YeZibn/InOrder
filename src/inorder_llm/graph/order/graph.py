@@ -4,7 +4,7 @@ from langgraph.graph import END, START, StateGraph
 
 from ...graph.base import BaseGraph
 from ...graph.runnable import dual_node
-from .nodes import CargoProfileNode, ContextUpdateNode, ExtractNode, FinalizeNode, OrderCompletenessNode, RewriteNode, VehicleResolutionNode
+from .nodes import CargoProfileNode, ContextUpdateNode, ExtractNode, FinalizeNode, NormalizeEntitiesNode, OrderCompletenessNode, RewriteNode, VehicleResolutionNode
 from .protocols import CargoProfileModel, EntityExtractorModel, RewriteModel, VehicleResolutionModel
 from .state import OrderGraphState
 
@@ -23,6 +23,7 @@ class OrderProcessingGraph(BaseGraph[OrderGraphState]):
         builder = StateGraph(OrderGraphState)
         builder.add_node("rewrite", dual_node(RewriteNode(self.rewrite_model), self.executor))
         builder.add_node("extract", dual_node(ExtractNode(self.extractor), self.extract_executor, self.extract_llm_gate))
+        builder.add_node("normalize_entities", dual_node(NormalizeEntitiesNode(), self.executor))
         builder.add_node("update_context", dual_node(ContextUpdateNode(), self.executor))
         if self.profile_model is not None:
             builder.add_node("cargo_profile", dual_node(CargoProfileNode(self.profile_model), self.executor))
@@ -32,7 +33,8 @@ class OrderProcessingGraph(BaseGraph[OrderGraphState]):
         builder.add_node("finalize", dual_node(FinalizeNode(), self.executor))
         builder.add_edge(START, "rewrite")
         builder.add_edge("rewrite", "extract")
-        builder.add_edge("extract", "update_context")
+        builder.add_edge("extract", "normalize_entities")
+        builder.add_edge("normalize_entities", "update_context")
         if self.profile_model is not None and self.vehicle_model is not None:
             builder.add_conditional_edges(
                 "update_context",

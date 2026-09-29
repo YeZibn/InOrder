@@ -200,7 +200,8 @@ def test_async_parent_graph_uses_native_intent_rewrite_and_json_extraction():
         graph = build_main_graph_from_models(LLMIntentModel(client), OrderRewriteModel(client), EntityExtractor(client))
         result = await graph.ainvoke({"message": "发货", "history": HistoryConversation(), "order_context": OrderContext(), "reference_time": "2026-08-24 10:00"})
         assert result["order_graph_entered"] is True
-        assert result["entities"] == []
+        assert result["order_result"]["entities"] == []
+        assert "order_context" not in result
         assert transport.calls == 3
     asyncio.run(run())
 

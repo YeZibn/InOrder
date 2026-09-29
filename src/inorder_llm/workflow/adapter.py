@@ -171,17 +171,14 @@ class WorkflowEventAdapter:
         anchor = state.get("reference_time")
         if anchor and isinstance(result, Mapping):
             order_result = result.get("order_result")
-            context = order_result.get("order_context") if isinstance(order_result, Mapping) else result.get("order_context")
+            context = order_result.get("order_context") if isinstance(order_result, Mapping) else None
             if context is not None and hasattr(context, "reference_time") and not context.reference_time:
                 preserved = deepcopy(context)
                 preserved.reference_time = anchor
                 result = dict(result)
-                if isinstance(order_result, Mapping):
-                    updated_order = dict(order_result)
-                    updated_order["order_context"] = preserved
-                    result["order_result"] = updated_order
-                else:
-                    result["order_context"] = preserved
+                updated_order = dict(order_result)
+                updated_order["order_context"] = preserved
+                result["order_result"] = updated_order
 
         # Compiled parent graphs normally expose child graphs as one update. Derive
         # their public boundaries from the final structured state, never from LLM text.
@@ -190,7 +187,9 @@ class WorkflowEventAdapter:
             yield self._step("intent", "识别用户意图", sequence)
             emitted.add("intent")
         if result.get("order_graph_entered"):
-            order_result = result.get("order_result") or result
+            order_result = result.get("order_result")
+            if not isinstance(order_result, Mapping):
+                order_result = {}
             if "order" not in emitted:
                 emitted.add("order")
                 sequence += 1
@@ -204,8 +203,8 @@ class WorkflowEventAdapter:
                 sequence += 1
                 yield self._step("vehicle", "处理车型", sequence)
         if result.get("order_graph_entered"):
-            order_result = result.get("order_result") or result
-            context = order_result.get("order_context")
+            order_result = result.get("order_result")
+            context = order_result.get("order_context") if isinstance(order_result, Mapping) else None
             if context is not None and order_result.get("order_context_updated"):
                 payload = {"order_context": context, "session_id": state.get("session_id")} 
                 yield WorkflowEvent(EventType.CREATE_ORDER_CONTEXT, payload)
@@ -261,7 +260,7 @@ class WorkflowEventAdapter:
     @staticmethod
     def _safe_result(result: Mapping[str, Any]) -> dict[str, Any]:
         # Final event contains only already structured public summaries.
-        allowed = ("intent_result", "order_result", "order_graph_entered", "order_summary", "qa_placeholder")
+        allowed = ("intent_result", "order_result", "order_graph_entered", "qa_placeholder")
         return {key: result[key] for key in allowed if key in result}
 
     @staticmethod

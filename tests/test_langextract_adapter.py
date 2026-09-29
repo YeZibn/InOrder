@@ -3,6 +3,7 @@ import os
 import pytest
 
 from inorder_llm.extract import GroundedExtraction, LangExtractEntityExtractor, map_grounded_extractions
+from inorder_llm.normalization import normalize_entities
 from inorder_llm.context import OrderContext, OrderContextReducer
 from inorder_llm.extract import Entity
 from inorder_llm.infrastructure.llm import ConfigurationError, LLMConfig, load_config
@@ -152,7 +153,7 @@ def test_langextract_provider_has_single_worker_finite_timeout_and_no_sdk_retry(
 def test_reducer_prefers_mapped_action_attribute():
     updated = OrderContextReducer().apply(
         OrderContext(),
-        [Entity("cargo", "add", {"name": "苹果", "weight": "1吨", "action": "set"}, "一吨苹果")],
+        normalize_entities([Entity("cargo", "add", {"name": "苹果", "weight": "1吨", "action": "set"}, "一吨苹果")]),
     )
     assert updated.cargo == [{
         "name": "苹果",

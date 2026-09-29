@@ -85,6 +85,15 @@ class ExtractNode(BaseNode[OrderGraphState]):
         return {"entities": entities}
 
 
+class NormalizeEntitiesNode(BaseNode[OrderGraphState]):
+    """Normalize extracted entities once before any action is applied."""
+
+    name = "normalize_entities"
+
+    def run(self, state: OrderGraphState) -> Dict[str, Any]:
+        return {"entities": normalize_entities(state.get("entities", []))}
+
+
 class ContextUpdateNode(BaseNode[OrderGraphState]):
     """Apply extracted actions to a copied order context."""
 
@@ -189,7 +198,7 @@ class VehicleResolutionNode(BaseNode[OrderGraphState]):
         original_context = state["order_context"]
         context = deepcopy(original_context)
         entities = state.get("entities", [])
-        vehicle_entities = [entity for entity in normalize_entities(entities) if entity.type in ("vehicle_type", "vehicle_specs")]
+        vehicle_entities = [entity for entity in entities if entity.type in ("vehicle_type", "vehicle_specs")]
         unresolved_types = [
             entity for entity in vehicle_entities
             if entity.type == "vehicle_type" and entity.attributes.get("normalization_accepted") is False
@@ -305,6 +314,7 @@ class VehicleResolutionNode(BaseNode[OrderGraphState]):
 __all__ = [
     "RewriteNode",
     "ExtractNode",
+    "NormalizeEntitiesNode",
     "ContextUpdateNode",
     "CargoProfileNode",
     "VehicleResolutionNode",

@@ -4,6 +4,7 @@ import pytest
 
 from inorder_llm.cli.app import CHAINS, CliSession, CommandParser, IntentCli, MODES, format_result
 from inorder_llm.context.models import HistoryConversation, OrderContext
+from inorder_llm.cli.runners import ChainContext, FullChainRunner, OrderChainRunner
 from inorder_llm.rewrite.models import RewriteResult
 
 
@@ -258,20 +259,85 @@ def test_cli_prefers_business_summary_and_missing_field_prompt():
 
 def test_cli_shows_vehicle_fit_level_and_boundary_reason_with_summary():
     output = format_result({
-        "order_summary": {"user_message": "已为您整理好运输需求。"},
-        "vehicle_resolution": {
-            "candidates": [{
-                "vehicle_type": "truck_6m8",
-                "fit_level": "upper_bound_only",
-                "reason": "仅按车型能力范围上界通过，可能适配。",
-                "volume_slack_m3": 2.0,
-            }],
+        "order_result": {
+            "order_summary": {"user_message": "已为您整理好运输需求。"},
+            "vehicle_resolution": {
+                "candidates": [{
+                    "vehicle_type": "truck_6m8",
+                    "fit_level": "upper_bound_only",
+                    "reason": "仅按车型能力范围上界通过，可能适配。",
+                    "volume_slack_m3": 2.0,
+                }],
+            },
         },
     }, chain="order")
 
     assert "仅按范围上界通过，可能适配" in output
     assert "仅按车型能力范围上界通过" in output
     assert "体积余量 2.0m³" in output
+
+
+def test_order_and_full_runners_use_the_same_nested_order_result_shape():
+    order_context = OrderContext(cargo=[{"name": "苹果"}])
+
+    class OrderGraph:
+        def invoke(self, state):
+            return {"order_context": order_context, "entities": [], "order_context_updated": True}
+
+    class MainGraph:
+        def invoke(self, state):
+            return {
+                "intent_result": {"main_intent": "order"},
+                "order_result": {"order_context": order_context, "entities": [], "order_context_updated": True},
+                "order_context": order_context,
+            }
+
+    context = ChainContext(HistoryConversation(), OrderContext(), "2026-08-17 10:00")
+    standalone = OrderChainRunner(OrderGraph()).run("运苹果", context)
+    full = FullChainRunner(MainGraph()).run("运苹果", context)
+
+    assert set(standalone) == {"order_result"}
+    assert set(full) == {"intent_result", "order_result"}
+    assert standalone["order_result"]["order_context"] is order_context
+    assert full["order_result"]["order_context"] is order_context
+    assert "order_context" not in full
+    for key in ("order_graph_entered", "rewrite_completed", "extract_executed", "entity_count", "order_context_updated", "cargo_profile_updated", "vehicle_resolution_completed"):
+        assert key in standalone["order_result"]
+        assert key in full["order_result"]
+
+
+def test_full_qa_runner_omits_order_result_and_context():
+    class QAGraph:
+        def invoke(self, state):
+            return {
+                "intent_result": {"main_intent": "qa"},
+                "qa_placeholder": "问答入口尚未实现",
+                "order_graph_entered": False,
+            }
+
+    context = ChainContext(HistoryConversation(), OrderContext(), "2026-08-17 10:00")
+    result = FullChainRunner(QAGraph()).run("问天气", context)
+
+    assert result["intent_result"]["main_intent"] == "qa"
+    assert result["qa_placeholder"] == "问答入口尚未实现"
+    assert "order_result" not in result
+    assert "order_context" not in result
+
+
+def test_order_runner_failure_preserves_session_context():
+    class FailingOrderGraph:
+        def invoke(self, state):
+            raise RuntimeError("order failed")
+
+    cli = IntentCli(order_graph=FailingOrderGraph())
+    cli.switch_chain("order")
+    original = OrderContext(vehicle_type="truck_4m2", vehicle_source="user_matched")
+    cli.session.order_context = original
+
+    with pytest.raises(RuntimeError, match="order failed"):
+        cli.handle_message("运苹果")
+
+    assert cli.session.order_context is original
 
 
 def test_successful_message_appends_concise_assistant_summary_only():
